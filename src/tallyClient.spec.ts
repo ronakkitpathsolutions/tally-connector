@@ -12,6 +12,7 @@ function cfgFor(port: number, timeoutMs = 5000): AppConfig {
     tallyPort: port,
     tallyTimeoutMs: timeoutMs,
     defaultCompany: 'C',
+    eduMode: false,
   };
 }
 

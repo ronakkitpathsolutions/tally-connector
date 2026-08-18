@@ -5,6 +5,7 @@ import { AppConfig } from './config';
 import { requireSecret } from './auth';
 import { buildVoucherXml } from './xml/buildVoucherXml';
 import { buildInvoiceXml } from './xml/buildInvoiceXml';
+import { normalizeEduDate } from './xml/eduDate';
 import { postToTally } from './tallyClient';
 import { InvoicePayload, VoucherPayload } from './types';
 
@@ -40,10 +41,26 @@ export function buildRouter(cfg: AppConfig): Router {
     res.json({ status: 'ok', tally: tally ? 'connected' : 'unreachable' });
   });
 
+  // Educational Tally rejects any voucher date other than the 1st, 2nd or last of the month. When
+  // that flag is on we move the date and say so loudly — a silently altered date on a financial
+  // document is exactly the kind of thing nobody should have to discover later.
+  const resolveDate = (date: string, billNo: string): string => {
+    if (!cfg.eduMode) return date;
+    const adjusted = normalizeEduDate(date);
+    if (adjusted !== date) {
+      console.warn(`[EDU MODE] ${billNo}: voucher date ${date} -> ${adjusted} to satisfy educational Tally`);
+    }
+    return adjusted;
+  };
+
   // A blank company falls back to the configured default — that is the per-branch mapping rule:
   // branches.tallyCompanyName wins, and blank means "use the connector's company".
   const renderXml = (body: VoucherPayload): string =>
-    buildVoucherXml({ ...body, company: body.company || cfg.defaultCompany });
+    buildVoucherXml({
+      ...body,
+      company: body.company || cfg.defaultCompany,
+      date: resolveDate(body.date, body.billNo),
+    });
 
   router.post('/tally/preview', secured, (req, res) => {
     try {
@@ -69,7 +86,11 @@ export function buildRouter(cfg: AppConfig): Router {
   // The full GST Sales Invoice, kept alongside /tally/voucher rather than replacing it: at the
   // client's office we need to try both and see which shape their Tally release actually accepts.
   const renderInvoiceXml = (body: InvoicePayload): string =>
-    buildInvoiceXml({ ...body, company: body.company || cfg.defaultCompany });
+    buildInvoiceXml({
+      ...body,
+      company: body.company || cfg.defaultCompany,
+      date: resolveDate(body.date, body.billNo),
+    });
 
   router.post('/tally/invoice/preview', secured, (req, res) => {
     try {

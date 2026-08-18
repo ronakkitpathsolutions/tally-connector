@@ -27,6 +27,19 @@ describe('loadConfig', () => {
     expect(() => loadConfig(rest as NodeJS.ProcessEnv)).toThrow(/DEFAULT_COMPANY/);
   });
 
+  it('leaves educational mode off unless explicitly enabled', () => {
+    // The dangerous default is "on". Anything other than an explicit true/1 must read as off.
+    expect(loadConfig(base as NodeJS.ProcessEnv).eduMode).toBe(false);
+    expect(loadConfig({ ...base, TALLY_EDU_MODE: 'false' } as NodeJS.ProcessEnv).eduMode).toBe(false);
+    expect(loadConfig({ ...base, TALLY_EDU_MODE: 'yes' } as NodeJS.ProcessEnv).eduMode).toBe(false);
+    expect(loadConfig({ ...base, TALLY_EDU_MODE: '' } as NodeJS.ProcessEnv).eduMode).toBe(false);
+  });
+
+  it('enables educational mode on true or 1', () => {
+    expect(loadConfig({ ...base, TALLY_EDU_MODE: 'true' } as NodeJS.ProcessEnv).eduMode).toBe(true);
+    expect(loadConfig({ ...base, TALLY_EDU_MODE: '1' } as NodeJS.ProcessEnv).eduMode).toBe(true);
+  });
+
   it('never binds 0.0.0.0 even if asked', () => {
     // Binding a wider interface would expose the connector to the client's whole office LAN.
     const c = loadConfig({ ...base, HOST: '0.0.0.0' } as NodeJS.ProcessEnv);

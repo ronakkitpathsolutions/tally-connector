@@ -12,9 +12,13 @@ const cfg: AppConfig = {
   tallyPort: 1, // nothing listens here
   tallyTimeoutMs: 500,
   defaultCompany: 'PRATHAM TRANSPORT PVT LTD',
+  eduMode: false,
 };
 
 const app = express().use(express.json()).use(buildRouter(cfg));
+const eduApp = express()
+  .use(express.json())
+  .use(buildRouter({ ...cfg, eduMode: true }));
 
 const payload: VoucherPayload = {
   remoteId: 'TMS-INV-44',
@@ -119,6 +123,36 @@ describe('routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(false);
       expect(res.body.errorCode).toBe('TALLY_UNREACHABLE');
+    });
+  });
+
+  describe('TALLY_EDU_MODE', () => {
+    it('leaves dates alone when the flag is off', async () => {
+      const res = await request(app).post('/tally/preview').set('x-connector-secret', 'top-secret').send(payload);
+      expect(res.body.xml).toContain('<DATE>20260805</DATE>');
+    });
+
+    it('rewrites the date to the last of the month when the flag is on', async () => {
+      const res = await request(eduApp).post('/tally/preview').set('x-connector-secret', 'top-secret').send(payload);
+      expect(res.body.xml).toContain('<DATE>20260831</DATE>');
+      expect(res.body.xml).toContain('<EFFECTIVEDATE>20260831</EFFECTIVEDATE>');
+    });
+
+    it('rewrites the date on the invoice route too', async () => {
+      const res = await request(eduApp)
+        .post('/tally/invoice/preview')
+        .set('x-connector-secret', 'top-secret')
+        .send({
+          remoteId: 'TMS-INV-44',
+          company: '',
+          date: '20260805',
+          billNo: 'T/2982/2026-27',
+          party: { ledgerName: 'KILLICK NIXON LTD' },
+          lines: [{ ledgerName: 'SALES IGST', amount: 83200, gstRate: 18 }],
+          taxes: [{ ledgerName: 'IGST (O/P)', amount: 14976, dutyHead: 'IGST', gstRate: 18 }],
+          total: 98176,
+        });
+      expect(res.body.xml).toContain('<DATE>20260831</DATE>');
     });
   });
 

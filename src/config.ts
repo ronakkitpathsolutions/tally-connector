@@ -6,6 +6,11 @@ export interface AppConfig {
   tallyPort: number;
   tallyTimeoutMs: number;
   defaultCompany: string;
+  /**
+   * TESTING ONLY. Normalises voucher dates to the 1st/2nd/last day that TallyPrime's free
+   * Educational version accepts. Must stay off against a licensed Tally.
+   */
+  eduMode: boolean;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -25,5 +30,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     tallyPort: Number(env.TALLY_PORT ?? 9000),
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
+    eduMode: env.TALLY_EDU_MODE === 'true' || env.TALLY_EDU_MODE === '1',
   };
 }
