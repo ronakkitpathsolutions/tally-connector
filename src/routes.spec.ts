@@ -1,0 +1,82 @@
+import express from 'express';
+import request from 'supertest';
+import { buildRouter } from './routes';
+import { AppConfig } from './config';
+import { VoucherPayload } from './types';
+
+const cfg: AppConfig = {
+  port: 4000,
+  host: '127.0.0.1',
+  sharedSecret: 'top-secret',
+  tallyHost: '127.0.0.1',
+  tallyPort: 1, // nothing listens here
+  tallyTimeoutMs: 500,
+  defaultCompany: 'PRATHAM TRANSPORT PVT LTD',
+};
+
+const app = express().use(express.json()).use(buildRouter(cfg));
+
+const payload: VoucherPayload = {
+  remoteId: 'TMS-INV-44',
+  company: 'PRATHAM TRANSPORT PVT LTD',
+  voucherType: 'Sales',
+  date: '20260805',
+  billNo: 'T/2982/2026-27',
+  party: { ledgerName: 'KILLICK NIXON LTD' },
+  entries: [
+    { ledgerName: 'KILLICK NIXON LTD', amount: -98176, isParty: true },
+    { ledgerName: 'SALES IGST', amount: 83200 },
+    { ledgerName: 'IGST (O/P)', amount: 14976 },
+  ],
+};
+
+describe('routes', () => {
+  it('leaves /health open so monitoring needs no secret', async () => {
+    const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+  });
+
+  it('rejects /tally/voucher without the secret', async () => {
+    const res = await request(app).post('/tally/voucher').send(payload);
+    expect(res.status).toBe(401);
+    expect(res.body.errorCode).toBe('AUTH');
+  });
+
+  it('rejects a wrong secret', async () => {
+    const res = await request(app).post('/tally/voucher').set('x-connector-secret', 'wrong').send(payload);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns generated XML from /tally/preview without contacting Tally', async () => {
+    const res = await request(app).post('/tally/preview').set('x-connector-secret', 'top-secret').send(payload);
+    expect(res.status).toBe(200);
+    expect(res.body.xml).toContain('<REMOTEID>TMS-INV-44</REMOTEID>');
+  });
+
+  it('falls back to the default company when the payload leaves it blank', async () => {
+    const res = await request(app)
+      .post('/tally/preview')
+      .set('x-connector-secret', 'top-secret')
+      .send({ ...payload, company: '' });
+    expect(res.body.xml).toContain('<SVCURRENTCOMPANY>PRATHAM TRANSPORT PVT LTD</SVCURRENTCOMPANY>');
+  });
+
+  it('reports BAD_PAYLOAD for an unbalanced voucher without contacting Tally', async () => {
+    const res = await request(app)
+      .post('/tally/voucher')
+      .set('x-connector-secret', 'top-secret')
+      .send({ ...payload, entries: payload.entries.slice(0, 2) });
+    expect(res.status).toBe(400);
+    expect(res.body.errorCode).toBe('BAD_PAYLOAD');
+  });
+
+  it('reports TALLY_UNREACHABLE when Tally is down', async () => {
+    // HTTP 200 with ok:false — a Tally-side failure is a result, not a transport error. The backend
+    // needs to tell "the connector was unreachable" apart from "Tally refused the voucher".
+    const res = await request(app).post('/tally/voucher').set('x-connector-secret', 'top-secret').send(payload);
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.errorCode).toBe('TALLY_UNREACHABLE');
+  });
+});

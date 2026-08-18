@@ -1,0 +1,65 @@
+import http from 'node:http';
+import iconv from 'iconv-lite';
+import { AppConfig } from './config';
+import { ConnectorResult } from './types';
+import { parseTallyResponse } from './xml/parseTallyResponse';
+
+/** Tally's XML interface speaks windows-1252. Sending UTF-8 mangles any non-ASCII character. */
+const TALLY_ENCODING = 'win1252';
+
+export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResult> {
+  const body = iconv.encode(xml, TALLY_ENCODING);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: ConnectorResult) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    const req = http.request(
+      {
+        host: cfg.tallyHost,
+        port: cfg.tallyPort,
+        method: 'POST',
+        path: '/',
+        timeout: cfg.tallyTimeoutMs,
+        headers: {
+          'Content-Type': 'text/xml;charset=windows-1252',
+          'Content-Length': body.length,
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => finish(parseTallyResponse(iconv.decode(Buffer.concat(chunks), TALLY_ENCODING))));
+      },
+    );
+
+    req.on('timeout', () => {
+      finish({
+        ok: false,
+        errorCode: 'TALLY_TIMEOUT',
+        error: `Tally did not respond within ${cfg.tallyTimeoutMs}ms. It may be waiting on a dialog box.`,
+        rawXml: null,
+      });
+      // destroy() fires an 'error' afterwards; the settled guard above keeps it from overwriting this.
+      req.destroy();
+    });
+
+    req.on('error', (err) => {
+      finish({
+        ok: false,
+        errorCode: 'TALLY_UNREACHABLE',
+        error:
+          `Cannot reach Tally at ${cfg.tallyHost}:${cfg.tallyPort} — ${err.message}. ` +
+          'Is TallyPrime open with a company loaded?',
+        rawXml: null,
+      });
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
