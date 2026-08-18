@@ -27,6 +27,56 @@ export interface VoucherPayload {
   entries: LedgerEntry[];
 }
 
+/**
+ * One sales line on a Tally Sales Invoice — one per charge type, so Freight Charges (SAC 99651100)
+ * and Lolo Income (SAC 996711) stay separate the way they do on the portal's bill.
+ */
+export interface InvoiceLine {
+  /** Sales ledger this charge posts to, e.g. "SALES IGST". */
+  ledgerName: string;
+  /** Taxable amount, positive. */
+  amount: number;
+  sacCode?: string;
+  gstRate?: number;
+  description?: string;
+}
+
+export interface TaxLine {
+  /** Tax ledger, e.g. "IGST (O/P)". */
+  ledgerName: string;
+  /** Tax amount, positive. */
+  amount: number;
+  dutyHead: 'CGST' | 'SGST' | 'IGST';
+  gstRate?: number;
+}
+
+export interface InvoiceParty extends VoucherParty {
+  placeOfSupply?: string;
+  registrationType?: 'Regular' | 'Composition' | 'Unregistered' | 'Consumer' | 'Unknown';
+}
+
+/**
+ * The full GST Sales Invoice shape, as opposed to the lean accounting voucher in VoucherPayload.
+ * Services only — this bills freight and agency charges against SAC codes, never stock items, so
+ * there are no INVENTORYENTRIES.
+ */
+export interface InvoicePayload {
+  remoteId: string;
+  company: string;
+  /** YYYYMMDD. */
+  date: string;
+  billNo: string;
+  narration?: string;
+  party: InvoiceParty;
+  lines: InvoiceLine[];
+  taxes: TaxLine[];
+  roundOff?: number;
+  /** Required only when roundOff is non-zero. */
+  roundOffLedgerName?: string;
+  /** Grand total. The party ledger is debited by exactly this. */
+  total: number;
+}
+
 export type ConnectorErrorCode =
   | 'AUTH'
   | 'BAD_PAYLOAD'

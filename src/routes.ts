@@ -4,8 +4,9 @@ import { exec } from 'node:child_process';
 import { AppConfig } from './config';
 import { requireSecret } from './auth';
 import { buildVoucherXml } from './xml/buildVoucherXml';
+import { buildInvoiceXml } from './xml/buildInvoiceXml';
 import { postToTally } from './tallyClient';
-import { VoucherPayload } from './types';
+import { InvoicePayload, VoucherPayload } from './types';
 
 /**
  * Probes whether anything is listening on Tally's port. A plain TCP connect rather than an XML
@@ -62,6 +63,30 @@ export function buildRouter(cfg: AppConfig): Router {
       return;
     }
     // 200 with ok:false for anything Tally-side — that is a result, not a transport failure.
+    res.json(await postToTally(cfg, xml));
+  });
+
+  // The full GST Sales Invoice, kept alongside /tally/voucher rather than replacing it: at the
+  // client's office we need to try both and see which shape their Tally release actually accepts.
+  const renderInvoiceXml = (body: InvoicePayload): string =>
+    buildInvoiceXml({ ...body, company: body.company || cfg.defaultCompany });
+
+  router.post('/tally/invoice/preview', secured, (req, res) => {
+    try {
+      res.json({ ok: true, xml: renderInvoiceXml(req.body as InvoicePayload) });
+    } catch (err) {
+      res.status(400).json({ ok: false, errorCode: 'BAD_PAYLOAD', error: (err as Error).message });
+    }
+  });
+
+  router.post('/tally/invoice', secured, async (req, res) => {
+    let xml: string;
+    try {
+      xml = renderInvoiceXml(req.body as InvoicePayload);
+    } catch (err) {
+      res.status(400).json({ ok: false, errorCode: 'BAD_PAYLOAD', error: (err as Error).message });
+      return;
+    }
     res.json(await postToTally(cfg, xml));
   });
 

@@ -71,6 +71,57 @@ describe('routes', () => {
     expect(res.body.errorCode).toBe('BAD_PAYLOAD');
   });
 
+  describe('/tally/invoice', () => {
+    const invoice = {
+      remoteId: 'TMS-INV-44',
+      company: '',
+      date: '20260805',
+      billNo: 'T/2982/2026-27',
+      party: { ledgerName: 'KILLICK NIXON LTD', gstin: '27AAACK1234A1Z5', stateName: 'Maharashtra' },
+      lines: [
+        { ledgerName: 'SALES IGST', amount: 80000, sacCode: '99651100', gstRate: 18 },
+        { ledgerName: 'SALES IGST', amount: 3200, sacCode: '996711', gstRate: 18 },
+      ],
+      taxes: [{ ledgerName: 'IGST (O/P)', amount: 14976, dutyHead: 'IGST', gstRate: 18 }],
+      total: 98176,
+    };
+
+    it('rejects the invoice route without the secret', async () => {
+      const res = await request(app).post('/tally/invoice').send(invoice);
+      expect(res.status).toBe(401);
+    });
+
+    it('previews invoice XML in Tally invoice format', async () => {
+      const res = await request(app)
+        .post('/tally/invoice/preview')
+        .set('x-connector-secret', 'top-secret')
+        .send(invoice);
+      expect(res.status).toBe(200);
+      expect(res.body.xml).toContain('<ISINVOICE>Yes</ISINVOICE>');
+      expect(res.body.xml).toContain('<PLACEOFSUPPLY>Maharashtra</PLACEOFSUPPLY>');
+      expect(res.body.xml).toContain('<HSNCODE>99651100</HSNCODE>');
+      // Default company substituted for the blank one, same rule as the voucher route.
+      expect(res.body.xml).toContain('<SVCURRENTCOMPANY>PRATHAM TRANSPORT PVT LTD</SVCURRENTCOMPANY>');
+    });
+
+    it('rejects an invoice whose total disagrees with its lines', async () => {
+      const res = await request(app)
+        .post('/tally/invoice')
+        .set('x-connector-secret', 'top-secret')
+        .send({ ...invoice, total: 99000 });
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe('BAD_PAYLOAD');
+      expect(res.body.error).toMatch(/total/i);
+    });
+
+    it('reports TALLY_UNREACHABLE from the invoice route when Tally is down', async () => {
+      const res = await request(app).post('/tally/invoice').set('x-connector-secret', 'top-secret').send(invoice);
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(false);
+      expect(res.body.errorCode).toBe('TALLY_UNREACHABLE');
+    });
+  });
+
   it('reports TALLY_UNREACHABLE when Tally is down', async () => {
     // HTTP 200 with ok:false — a Tally-side failure is a result, not a transport error. The backend
     // needs to tell "the connector was unreachable" apart from "Tally refused the voucher".
