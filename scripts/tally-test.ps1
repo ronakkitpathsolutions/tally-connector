@@ -9,8 +9,15 @@
 #  Copy the whole output back to Claude.
 # =============================================================================
 
-$TallyUrl = "http://localhost:9000"
-$TestCompany = "PRATHAM TEST COMPANY"
+param(
+    # This server runs more than one TallyPrime, one per Windows session. The client's live books
+    # sit on 9000; the test instance is given its own port so neither disturbs the other.
+    [int]$TallyPort = 9001,
+    [string]$TestCompany = "PRATHAM TEST COMPANY"
+)
+
+$TallyUrl = "http://localhost:$TallyPort"
+Write-Host "Target: $TallyUrl   company: $TestCompany"
 
 function Send-Tally([string]$Xml, [int]$TimeoutSec = 120) {
     try {
