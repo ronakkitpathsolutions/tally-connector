@@ -8,6 +8,8 @@ import { buildInvoiceXml } from './xml/buildInvoiceXml';
 import { normalizeEduDate } from './xml/eduDate';
 import { postToTally, postRawToTally } from './tallyClient';
 import { buildVoucherLookupXml, voucherNumberPresent } from './xml/buildVoucherLookupXml';
+import { buildLedgerLookupXml, ledgerNamesIn, missingLedgers } from './xml/buildLedgerLookupXml';
+import { buildMastersImportXml } from './xml/buildMastersXml';
 import { probeTally } from './tallyHealth';
 import { InvoicePayload, VoucherPayload } from './types';
 
@@ -80,7 +82,6 @@ export function buildRouter(cfg: AppConfig): Router {
         company: body.company || cfg.defaultCompany,
         date: resolveDate(body.date, body.billNo),
       },
-      { createMasters: cfg.allowMasterCreate },
     );
 
   router.post('/tally/invoice/preview', secured, (req, res) => {
@@ -125,6 +126,35 @@ export function buildRouter(cfg: AppConfig): Router {
         rawXml: null,
       });
       return;
+    }
+
+    // Create only what Tally is missing, then import. Checking first means a repeat push asks
+    // Tally to create nothing, and a ledger that already exists is never touched.
+    if (cfg.allowMasterCreate) {
+      const ledgers = await postRawToTally(cfg, buildLedgerLookupXml(company));
+      if (!ledgers.ok) {
+        res.json({
+          ok: false,
+          errorCode: 'TALLY_UNREACHABLE',
+          error: `Could not read Tally's ledgers, so nothing was imported — ${ledgers.error}`,
+          rawXml: null,
+        });
+        return;
+      }
+      const missing = missingLedgers({ ...body, company, date }, ledgerNamesIn(ledgers.body));
+      if (missing.length) {
+        console.log(`[masters] creating ${missing.length} ledger(s) for ${body.billNo}: ${missing.join(', ')}`);
+        const created = await postToTally(cfg, buildMastersImportXml({ ...body, company, date }, missing));
+        if (!created.ok) {
+          res.json({
+            ok: false,
+            errorCode: created.errorCode,
+            error: `Could not create the missing ledgers (${missing.join(', ')}) — ${created.error}`,
+            rawXml: created.rawXml,
+          });
+          return;
+        }
+      }
     }
 
     res.json(await postToTally(cfg, xml));

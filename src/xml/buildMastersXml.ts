@@ -28,7 +28,12 @@ function ledgerXml(name: string, parent: string, extras = ''): string {
   );
 }
 
-export function buildMastersXml(payload: InvoicePayload): string {
+export function buildMastersXml(payload: InvoicePayload, only?: string[]): string {
+  // `only` narrows this to the ledgers Tally is actually missing. Without it every push would ask
+  // Tally to re-create ledgers it already holds.
+  const wanted = only ? new Set(only.map((n) => n.trim().toLowerCase())) : null;
+  const needed = (name: string) => !wanted || wanted.has(name.trim().toLowerCase());
+
   const messages: string[] = [];
 
   // Bill-wise tracking on the party keeps the invoice reference usable for receipts later.
@@ -38,7 +43,7 @@ export function buildMastersXml(payload: InvoicePayload): string {
     `<GSTREGISTRATIONTYPE>${escapeXml(payload.party.registrationType ?? 'Regular')}</GSTREGISTRATIONTYPE>` +
     (payload.party.stateName ? `<LEDSTATENAME>${escapeXml(payload.party.stateName)}</LEDSTATENAME>` : '') +
     '<COUNTRYNAME>India</COUNTRYNAME>';
-  messages.push(ledgerXml(payload.party.ledgerName, 'Sundry Debtors', partyExtras));
+  if (needed(payload.party.ledgerName)) messages.push(ledgerXml(payload.party.ledgerName, 'Sundry Debtors', partyExtras));
 
   // A bill can repeat the same sales ledger across charge types; create it once.
   const seen = new Set<string>([payload.party.ledgerName]);
@@ -46,6 +51,7 @@ export function buildMastersXml(payload: InvoicePayload): string {
   for (const line of payload.lines) {
     if (seen.has(line.ledgerName)) continue;
     seen.add(line.ledgerName);
+    if (!needed(line.ledgerName)) continue;
     const isRoundOff = line.ledgerName === payload.roundOffLedgerName;
     messages.push(ledgerXml(line.ledgerName, isRoundOff ? 'Indirect Expenses' : 'Sales Accounts'));
   }
@@ -53,6 +59,7 @@ export function buildMastersXml(payload: InvoicePayload): string {
   for (const tax of payload.taxes) {
     if (seen.has(tax.ledgerName)) continue;
     seen.add(tax.ledgerName);
+    if (!needed(tax.ledgerName)) continue;
     messages.push(
       ledgerXml(
         tax.ledgerName,
@@ -64,10 +71,30 @@ export function buildMastersXml(payload: InvoicePayload): string {
     );
   }
 
-  if (payload.roundOffLedgerName && !seen.has(payload.roundOffLedgerName)) {
+  if (payload.roundOffLedgerName && !seen.has(payload.roundOffLedgerName) && needed(payload.roundOffLedgerName)) {
     seen.add(payload.roundOffLedgerName);
     messages.push(ledgerXml(payload.roundOffLedgerName, 'Indirect Expenses'));
   }
 
   return messages.map((m) => `<TALLYMESSAGE xmlns:UDF="TallyUDF">${m}</TALLYMESSAGE>`).join('');
+}
+
+/**
+ * The same ledger messages wrapped in a complete import envelope, for sending on their own ahead of
+ * the voucher. buildMastersXml alone returns only TALLYMESSAGE blocks, which Tally cannot accept as
+ * a request.
+ */
+export function buildMastersImportXml(payload: InvoicePayload, only?: string[]): string {
+  return (
+    '<ENVELOPE>' +
+    '<HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>' +
+    '<BODY><IMPORTDATA>' +
+    '<REQUESTDESC>' +
+    '<REPORTNAME>All Masters</REPORTNAME>' +
+    `<STATICVARIABLES><SVCURRENTCOMPANY>${escapeXml(payload.company)}</SVCURRENTCOMPANY></STATICVARIABLES>` +
+    '</REQUESTDESC>' +
+    `<REQUESTDATA>${buildMastersXml(payload, only)}</REQUESTDATA>` +
+    '</IMPORTDATA></BODY>' +
+    '</ENVELOPE>'
+  );
 }
