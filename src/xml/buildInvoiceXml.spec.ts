@@ -44,7 +44,10 @@ describe('buildInvoiceXml', () => {
   it('marks the voucher as an invoice, not a plain accounting voucher', () => {
     const xml = buildInvoiceXml(igstInvoice);
     expect(xml).toContain('<ISINVOICE>Yes</ISINVOICE>');
-    expect(xml).toContain('OBJVIEW="Invoice Voucher View"');
+    // Accounting, not "Invoice Voucher View": that one is the inventory view and the client's
+    // TallyPrime rejects it outright for a services bill.
+    expect(xml).toContain('OBJVIEW="Accounting Voucher View"');
+    expect(xml).not.toContain('Invoice Voucher View');
     expect(xml).toContain('<REMOTEID>TMS-INV-44</REMOTEID>');
   });
 

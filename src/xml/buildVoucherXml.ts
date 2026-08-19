@@ -8,6 +8,12 @@ import { escapeXml, formatAmount } from './escape';
  */
 const BALANCE_TOLERANCE = 0.005;
 
+// "Invoice Voucher View" is the inventory/stock-item view and TallyPrime throws it out as an
+// exception for a services bill — verified against the client's Tally, where it silently
+// returned EXCEPTIONS 1 with no LINEERROR. Freight and agency charges are accounting lines,
+// so this is the correct view as well as the one that imports.
+const VOUCHER_VIEW = 'Accounting Voucher View';
+
 /** Below this an entry is treated as zero and dropped rather than sent as "0.00". */
 const ZERO_THRESHOLD = 0.005;
 
@@ -46,7 +52,7 @@ export function buildVoucherXml(payload: VoucherPayload): string {
     '<TALLYMESSAGE xmlns:UDF="TallyUDF">' +
     // ACTION stays "Create" even for a re-push: when Tally already knows the REMOTEID it treats the
     // import as an alter of that voucher rather than a new one.
-    `<VOUCHER VCHTYPE="${escapeXml(payload.voucherType)}" ACTION="Create" OBJVIEW="Invoice Voucher View">` +
+    `<VOUCHER VCHTYPE="${escapeXml(payload.voucherType)}" ACTION="Create" OBJVIEW="${VOUCHER_VIEW}">` +
     `<REMOTEID>${escapeXml(payload.remoteId)}</REMOTEID>` +
     `<DATE>${escapeXml(payload.date)}</DATE>` +
     `<EFFECTIVEDATE>${escapeXml(payload.date)}</EFFECTIVEDATE>` +
@@ -58,7 +64,7 @@ export function buildVoucherXml(payload: VoucherPayload): string {
     (payload.party.gstin ? `<PARTYGSTIN>${escapeXml(payload.party.gstin)}</PARTYGSTIN>` : '') +
     (payload.party.stateName ? `<STATENAME>${escapeXml(payload.party.stateName)}</STATENAME>` : '') +
     (payload.narration ? `<NARRATION>${escapeXml(payload.narration)}</NARRATION>` : '') +
-    '<PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>' +
+    `<PERSISTEDVIEW>${VOUCHER_VIEW}</PERSISTEDVIEW>` +
     entries.map(ledgerEntryXml).join('') +
     '</VOUCHER>' +
     '</TALLYMESSAGE>' +

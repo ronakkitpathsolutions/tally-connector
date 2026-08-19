@@ -3,6 +3,12 @@ import { escapeXml, formatAmount } from './escape';
 import { buildMastersXml } from './buildMastersXml';
 
 /** Half a paisa — rounded GST halves routinely leave sub-paisa dust. */
+// "Invoice Voucher View" is the inventory/stock-item view and TallyPrime throws it out as an
+// exception for a services bill — verified against the client's Tally, where it silently
+// returned EXCEPTIONS 1 with no LINEERROR. Freight and agency charges are accounting lines,
+// so this is the correct view as well as the one that imports.
+const VOUCHER_VIEW = 'Accounting Voucher View';
+
 const TOLERANCE = 0.005;
 
 const isZero = (n: number): boolean => Math.abs(n) < TOLERANCE;
@@ -96,7 +102,7 @@ export function buildInvoiceXml(payload: InvoicePayload, options: { createMaster
     (options.createMasters ? buildMastersXml(payload) : '') +
     '<TALLYMESSAGE xmlns:UDF="TallyUDF">' +
     // ACTION stays "Create": when Tally already knows the REMOTEID it alters that voucher instead.
-    '<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">' +
+    `<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="${VOUCHER_VIEW}">` +
     `<REMOTEID>${escapeXml(payload.remoteId)}</REMOTEID>` +
     `<DATE>${escapeXml(payload.date)}</DATE>` +
     `<EFFECTIVEDATE>${escapeXml(payload.date)}</EFFECTIVEDATE>` +
@@ -115,7 +121,7 @@ export function buildInvoiceXml(payload: InvoicePayload, options: { createMaster
     '<COUNTRYOFRESIDENCE>India</COUNTRYOFRESIDENCE>' +
     tag('GSTREGISTRATIONTYPE', payload.party.registrationType ?? 'Regular') +
     tag('NARRATION', payload.narration) +
-    '<PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>' +
+    `<PERSISTEDVIEW>${VOUCHER_VIEW}</PERSISTEDVIEW>` +
     // Party first, then sales, then tax, then round-off — the order Tally lists them in the voucher.
     '<ALLLEDGERENTRIES.LIST>' +
     `<LEDGERNAME>${party}</LEDGERNAME>` +
