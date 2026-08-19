@@ -78,8 +78,8 @@ set /p TALLY_COMPANY=Exact Tally company name:
 if "!TALLY_COMPANY!"=="" goto :no_company
 
 set "TALLY_PORT="
-set /p TALLY_PORT=Tally port [9000]:
-if "!TALLY_PORT!"=="" set "TALLY_PORT=9000"
+set /p TALLY_PORT=Tally port [9001]:
+if "!TALLY_PORT!"=="" set "TALLY_PORT=9001"
 
 REM Redirection is written BEFORE the text on purpose. In `echo PORT=4000> .env`
 REM cmd reads the trailing 0 as a file handle and redirects stdin instead, so any

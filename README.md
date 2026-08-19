@@ -2,7 +2,7 @@
 
 Bridges the TMS portal to TallyPrime. It runs on the same Windows PC as Tally, receives a
 fully-resolved JSON invoice over a Cloudflare Tunnel, renders Tally's import XML, posts it to
-`localhost:9000`, and normalises Tally's reply back to JSON.
+`localhost:9001`, and normalises Tally's reply back to JSON.
 
 ```
 TMS Backend (AWS)
@@ -15,10 +15,10 @@ tally.tally-connector.store
       |
    Connector :4000        <- binds 127.0.0.1 only
       |
-   TallyPrime :9000
+   TallyPrime :9001
 ```
 
-Tally's port `9000` is never exposed to the internet.
+Tally's port is never exposed to the internet.
 
 By default the connector binds `127.0.0.1`, so nobody on the office LAN can reach `:4000` either —
 only `cloudflared`, running locally on the same machine. Setting `HOST` to a LAN address (useful
@@ -36,9 +36,20 @@ from the whole network, and the shared secret is then the only thing guarding it
 
 ### Enabling Tally's HTTP server
 
-In TallyPrime: `F1 (Help)` → `Settings` → `Advanced Configuration`, turn the HTTP server on, and
-leave the port at `9000`. Tally only answers while it is **running with a company loaded** — a
-closed Tally, or an open Tally with no company, will not respond.
+In TallyPrime: `F1 (Help)` → `Settings` → `Connectivity` → `Client/Server configuration`. Set
+`TallyPrime acts as` to **Both** and the port to **9001**, then accept the dialog with `Ctrl+A`.
+Tally only answers while it is **running with a company loaded** — a closed Tally, or an open
+Tally with no company, will not respond.
+
+**Why 9001 and not Tally's default 9000.** The client's server is a terminal server running one
+TallyPrime per Windows session, and the instance in an RDP session already holds 9000 with their
+live books. Giving the connector's Tally its own port means neither disturbs the other, and it
+removes a whole class of confusion: for a full day the Tally on screen and the Tally answering on
+9000 were two different processes showing two different companies.
+
+Use the keyboard for Tally's dialogs (`Ctrl+A` to accept, `Y`/`N`, `Esc`). Mouse clicks on them
+are unreliable over a remote session, and a dialog left open makes Tally accept TCP connections
+while answering nothing.
 
 ## Install
 
@@ -67,7 +78,7 @@ uninstall.bat
 | `PORT` | Connector port. `4000`, and the Cloudflare Tunnel origin must match. |
 | `HOST` | Address this PC is reachable at, used both to bind and to reach Tally. Default `127.0.0.1`. See the warning below. |
 | `SHARED_SECRET` | Must equal `TALLY_CONNECTOR_SECRET` on the TMS backend, or every request gets a 401. |
-| `TALLY_PORT` | `9000` |
+| `TALLY_PORT` | Port the target TallyPrime listens on. `9001` — see below. |
 | `TALLY_TIMEOUT_MS` | How long to wait for Tally before giving up. Default 30000. |
 | `DEFAULT_COMPANY` | Exact Tally company name, used when the backend sends a blank company. |
 | `TALLY_EDU_MODE` | **Testing only.** See below. Keep `false` in production. |
@@ -89,7 +100,7 @@ All except `/health` require the `x-connector-secret` header.
 
 | Route | Purpose |
 |---|---|
-| `GET /health` | Liveness, plus whether Tally answers on `:9000`. Unauthenticated so monitoring can use it. |
+| `GET /health` | Liveness, plus whether Tally answers. Unauthenticated so monitoring can use it. |
 | `POST /tally/invoice` | Full GST Sales Invoice. This is what the TMS backend calls. |
 | `POST /tally/invoice/preview` | Renders the same XML and returns it **without sending it to Tally**. |
 | `POST /tally/voucher` | Leaner plain accounting voucher — kept alongside the invoice route while we confirm which shape this Tally release accepts. |
@@ -124,7 +135,7 @@ would mark every failed invoice as synced.
 |---|---|
 | `AUTH` | Wrong or missing `x-connector-secret`. |
 | `BAD_PAYLOAD` | The invoice does not add up, or has no lines. Never reached Tally. |
-| `TALLY_UNREACHABLE` | Nothing answering on `:9000`. Tally closed, or no company loaded. |
+| `TALLY_UNREACHABLE` | Nothing answering on the Tally port. Tally closed, or no company loaded. |
 | `TALLY_TIMEOUT` | Tally accepted the connection then went quiet — usually sitting on a dialog box. |
 | `TALLY_LINEERROR` | Tally rejected it. The message is Tally's own text, usually a ledger name mismatch. |
 | `TALLY_NO_CHANGE` | Tally accepted the request but created and altered nothing. |

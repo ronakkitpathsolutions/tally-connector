@@ -40,7 +40,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     host: hostOf(env),
     sharedSecret: required(env, 'SHARED_SECRET'),
     tallyHost: hostOf(env),
-    tallyPort: Number(env.TALLY_PORT ?? 9000),
+    // 9001, not Tally's 9000: on the client's terminal server 9000 belongs to the TallyPrime
+    // instance holding their live books.
+    tallyPort: Number(env.TALLY_PORT ?? 9001),
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
     eduMode: env.TALLY_EDU_MODE === 'true' || env.TALLY_EDU_MODE === '1',

@@ -35,7 +35,7 @@ export function parseTallyResponse(xml: string): ConnectorResult {
     return {
       ok: false,
       errorCode: 'TALLY_LINEERROR',
-      error: 'Unexpected response from Tally — no ENVELOPE/BODY/DATA. Is port 9000 really TallyPrime?',
+      error: 'Unexpected response from Tally — no ENVELOPE/BODY/DATA. Is that port really TallyPrime?',
       rawXml: xml,
     };
   }

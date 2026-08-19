@@ -3,7 +3,6 @@ import { loadConfig } from './config';
 const base = {
   PORT: '4000',
   SHARED_SECRET: 's3cret',
-  TALLY_PORT: '9000',
   DEFAULT_COMPANY: 'PRATHAM TRANSPORT PVT LTD',
 };
 
@@ -11,9 +10,13 @@ describe('loadConfig', () => {
   it('parses numeric fields and defaults host to 127.0.0.1', () => {
     const c = loadConfig(base as NodeJS.ProcessEnv);
     expect(c.port).toBe(4000);
-    expect(c.tallyPort).toBe(9000);
+    expect(c.tallyPort).toBe(9001);
     expect(c.host).toBe('127.0.0.1');
     expect(c.defaultCompany).toBe('PRATHAM TRANSPORT PVT LTD');
+  });
+
+  it('honours an explicit TALLY_PORT', () => {
+    expect(loadConfig({ ...base, TALLY_PORT: '9000' } as NodeJS.ProcessEnv).tallyPort).toBe(9000);
   });
 
   it('defaults both the bind address and the Tally host to loopback', () => {
