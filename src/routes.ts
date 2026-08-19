@@ -12,6 +12,7 @@ import { buildLedgerLookupXml, ledgerNamesIn, missingLedgers } from './xml/build
 import { buildMastersImportXml } from './xml/buildMastersXml';
 import { probeTally } from './tallyHealth';
 import { queueDepth } from './tallyQueue';
+import { log } from './logger';
 import { InvoicePayload, VoucherPayload } from './types';
 
 export function buildRouter(cfg: AppConfig): Router {
@@ -106,13 +107,18 @@ export function buildRouter(cfg: AppConfig): Router {
 
   router.post('/tally/invoice', secured, async (req, res) => {
     const body = req.body as InvoicePayload;
+    const startedAt = Date.now();
+    const took = () => `${Date.now() - startedAt}ms`;
     let xml: string;
     try {
       xml = renderInvoiceXml(body);
     } catch (err) {
+      log.warn('rejected before Tally', { billNo: body.billNo, reason: (err as Error).message });
       res.status(400).json({ ok: false, errorCode: 'BAD_PAYLOAD', error: (err as Error).message });
       return;
     }
+
+    log.info('push received', { billNo: body.billNo, company: body.company || cfg.defaultCompany, queued: queueDepth() });
 
     // Ask Tally whether this bill is already there before importing. REMOTEID does not
     // deduplicate — the same voucher imported twice becomes two vouchers, verified against the
@@ -121,6 +127,7 @@ export function buildRouter(cfg: AppConfig): Router {
     const date = resolveDate(body.date, body.billNo);
     const lookup = await postRawToTally(cfg, buildVoucherLookupXml(company, date));
     if (lookup.ok && voucherNumberPresent(lookup.body, body.billNo)) {
+      log.info('already in Tally, skipped', { billNo: body.billNo, took: took() });
       res.json({
         ok: true,
         action: 'exists',
@@ -131,6 +138,7 @@ export function buildRouter(cfg: AppConfig): Router {
     }
     // A failed lookup is not treated as "absent": importing on a guess is how duplicates happen.
     if (!lookup.ok) {
+      log.error('duplicate check failed, not imported', { billNo: body.billNo, reason: lookup.error, took: took() });
       res.json({
         ok: false,
         errorCode: 'TALLY_UNREACHABLE',
@@ -145,6 +153,7 @@ export function buildRouter(cfg: AppConfig): Router {
     if (cfg.allowMasterCreate) {
       const ledgers = await postRawToTally(cfg, buildLedgerLookupXml(company));
       if (!ledgers.ok) {
+        log.error('ledger lookup failed, not imported', { billNo: body.billNo, reason: ledgers.error, took: took() });
         res.json({
           ok: false,
           errorCode: 'TALLY_UNREACHABLE',
@@ -155,9 +164,10 @@ export function buildRouter(cfg: AppConfig): Router {
       }
       const missing = missingLedgers({ ...body, company, date }, ledgerNamesIn(ledgers.body));
       if (missing.length) {
-        console.log(`[masters] creating ${missing.length} ledger(s) for ${body.billNo}: ${missing.join(', ')}`);
+        log.info('creating missing ledgers', { billNo: body.billNo, ledgers: missing });
         const created = await postToTally(cfg, buildMastersImportXml({ ...body, company, date }, missing));
         if (!created.ok) {
+          log.error('ledger creation failed', { billNo: body.billNo, ledgers: missing, reason: created.error });
           res.json({
             ok: false,
             errorCode: created.errorCode,
@@ -169,7 +179,19 @@ export function buildRouter(cfg: AppConfig): Router {
       }
     }
 
-    res.json(await postToTally(cfg, xml));
+    const result = await postToTally(cfg, xml);
+    if (result.ok) {
+      log.info('imported', { billNo: body.billNo, action: result.action, voucherId: result.voucherId, took: took() });
+    } else {
+      // Tally's own words, kept verbatim — a paraphrase here is a paraphrase in every bug report.
+      log.error('Tally rejected the voucher', {
+        billNo: body.billNo,
+        errorCode: result.errorCode,
+        reason: result.error,
+        took: took(),
+      });
+    }
+    res.json(result);
   });
 
   router.post('/admin/update', secured, (_req, res) => {
