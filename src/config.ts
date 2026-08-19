@@ -24,22 +24,26 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
   return value;
 }
 
-/** The address this PC is reachable at — used both to bind and to reach Tally. */
-function hostOf(env: NodeJS.ProcessEnv): string {
+/**
+ * Interface to listen on. `127.0.0.1` reaches only this machine; `0.0.0.0` binds every interface,
+ * so both http://localhost:4000 and http://<lan-ip>:4000 work.
+ *
+ * Binding a single LAN address does NOT also cover loopback, which is why 0.0.0.0 is the value to
+ * use when both need to answer. Anything other than loopback puts :4000 on the office network,
+ * after which the shared secret is the only thing guarding it.
+ */
+function bindHostOf(env: NodeJS.ProcessEnv): string {
   return env.HOST?.trim() || '127.0.0.1';
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   return {
     port: Number(env.PORT ?? 4000),
-    // One HOST for both, because the connector and TallyPrime run on the same PC — it is the
-    // address this machine is reachable at, and the address Tally is listening on.
-    //
-    // Defaults to loopback. Setting it to a LAN address makes :4000 reachable from the whole
-    // office network, after which the shared secret is the only thing guarding it.
-    host: hostOf(env),
+    host: bindHostOf(env),
     sharedSecret: required(env, 'SHARED_SECRET'),
-    tallyHost: hostOf(env),
+    // Not the bind address, and not configurable: TallyPrime runs on this same PC, and 0.0.0.0 —
+    // the value needed to bind every interface — is not something you can connect *to*.
+    tallyHost: '127.0.0.1',
     // 9001, not Tally's 9000: on the client's terminal server 9000 belongs to the TallyPrime
     // instance holding their live books.
     tallyPort: Number(env.TALLY_PORT ?? 9001),

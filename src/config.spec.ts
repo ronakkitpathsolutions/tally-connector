@@ -25,10 +25,20 @@ describe('loadConfig', () => {
     expect(c.tallyHost).toBe('127.0.0.1');
   });
 
-  it('uses HOST for both, since Tally runs on the same PC', () => {
+  it('binds where HOST says, but always reaches Tally on loopback', () => {
     const c = loadConfig({ ...base, HOST: '192.168.0.92' } as NodeJS.ProcessEnv);
     expect(c.host).toBe('192.168.0.92');
-    expect(c.tallyHost).toBe('192.168.0.92');
+    // Tally is on this machine; the bind address has nothing to do with reaching it.
+    expect(c.tallyHost).toBe('127.0.0.1');
+  });
+
+  it('accepts 0.0.0.0 so localhost and the LAN address both answer', () => {
+    // Binding one LAN address does not also cover loopback, so http://localhost:4000 would refuse.
+    // 0.0.0.0 is the only value that serves both.
+    const c = loadConfig({ ...base, HOST: '0.0.0.0' } as NodeJS.ProcessEnv);
+    expect(c.host).toBe('0.0.0.0');
+    // ...and it must not leak into the Tally target, which would be unconnectable.
+    expect(c.tallyHost).toBe('127.0.0.1');
   });
 
   it('falls back to loopback for a blank HOST', () => {
@@ -60,9 +70,5 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, TALLY_EDU_MODE: '1' } as NodeJS.ProcessEnv).eduMode).toBe(true);
   });
 
-  it('honours an explicit 0.0.0.0', () => {
-    // Allowed, but it binds every interface — the shared secret is then the only thing guarding
-    // :4000. Kept as a test so the exposure is a stated behaviour rather than an accident.
-    expect(loadConfig({ ...base, HOST: '0.0.0.0' } as NodeJS.ProcessEnv).host).toBe('0.0.0.0');
-  });
+
 });

@@ -11,7 +11,9 @@ app.use(buildRouter(cfg));
 
 const server = app.listen(cfg.port, cfg.host, () => {
   console.log(`tally-connector listening on http://${cfg.host}:${cfg.port}`);
-  console.log(`tally target: http://${cfg.host}:${cfg.tallyPort}`);
+  // cfg.tallyHost, not cfg.host: the bind address and the Tally target are different things,
+  // and a log that conflates them sends you hunting in the wrong place.
+  console.log(`tally target: http://${cfg.tallyHost}:${cfg.tallyPort}`);
   console.log(`default company: ${cfg.defaultCompany}`);
   if (cfg.eduMode) {
     // Impossible to leave on by accident without seeing this on every start.
