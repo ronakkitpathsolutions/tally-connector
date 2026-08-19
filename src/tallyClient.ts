@@ -3,13 +3,14 @@ import iconv from 'iconv-lite';
 import { AppConfig } from './config';
 import { ConnectorResult } from './types';
 import { parseTallyResponse } from './xml/parseTallyResponse';
+import { runExclusive } from './tallyQueue';
 
 /** Tally's XML interface speaks windows-1252. Sending UTF-8 mangles any non-ASCII character. */
 const TALLY_ENCODING = 'win1252';
 
 /** Raw round-trip, for read-only queries whose reply is not an import result. */
 export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
-  return new Promise((resolve) => {
+  return runExclusive(() => new Promise((resolve) => {
     let settled = false;
     const done = (r: { ok: true; body: string } | { ok: false; error: string }) => {
       if (settled) return;
@@ -39,13 +40,13 @@ export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true;
     req.on('error', (err) => done({ ok: false, error: err.message }));
     req.write(body);
     req.end();
-  });
+  }));
 }
 
 export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResult> {
   const body = iconv.encode(xml, TALLY_ENCODING);
 
-  return new Promise((resolve) => {
+  return runExclusive(() => new Promise<ConnectorResult>((resolve) => {
     let settled = false;
     const finish = (result: ConnectorResult) => {
       if (settled) return;
@@ -96,5 +97,5 @@ export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResul
 
     req.write(body);
     req.end();
-  });
+  }));
 }

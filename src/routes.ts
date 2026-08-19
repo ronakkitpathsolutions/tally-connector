@@ -11,6 +11,7 @@ import { buildVoucherLookupXml, voucherNumberPresent } from './xml/buildVoucherL
 import { buildLedgerLookupXml, ledgerNamesIn, missingLedgers } from './xml/buildLedgerLookupXml';
 import { buildMastersImportXml } from './xml/buildMastersXml';
 import { probeTally } from './tallyHealth';
+import { queueDepth } from './tallyQueue';
 import { InvoicePayload, VoucherPayload } from './types';
 
 export function buildRouter(cfg: AppConfig): Router {
@@ -27,6 +28,9 @@ export function buildRouter(cfg: AppConfig): Router {
       tally,
       // The effective settings, so a misconfigured connector can be spotted from outside instead
       // of guessed at. No secrets here — only what is already visible in the XML it sends.
+      // How many Tally calls are queued behind this one. Anything consistently above 1 means
+      // pushes are arriving faster than Tally can answer.
+      queued: queueDepth(),
       config: {
         tallyPort: cfg.tallyPort,
         defaultCompany: cfg.defaultCompany,

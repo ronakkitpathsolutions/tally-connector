@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { AppConfig } from './config';
+import { runExclusive } from './tallyQueue';
 
 export type TallyHealth = 'connected' | 'not-responding' | 'unreachable';
 
@@ -18,7 +19,9 @@ const PROBE_TIMEOUT_MS = 5000;
  * `<RESPONSE>TallyPrime Server is Running</RESPONSE>` and it touches no company data.
  */
 export function probeTally(cfg: AppConfig, timeoutMs: number = PROBE_TIMEOUT_MS): Promise<TallyHealth> {
-  return new Promise((resolve) => {
+  // Queued like every other Tally call: a health poll landing mid-import would be one more
+  // concurrent request on a server that handles one at a time.
+  return runExclusive(() => new Promise<TallyHealth>((resolve) => {
     let settled = false;
     const done = (result: TallyHealth) => {
       if (settled) return;
@@ -43,5 +46,5 @@ export function probeTally(cfg: AppConfig, timeoutMs: number = PROBE_TIMEOUT_MS)
     req.on('error', () => done('unreachable'));
 
     req.end();
-  });
+  }));
 }
