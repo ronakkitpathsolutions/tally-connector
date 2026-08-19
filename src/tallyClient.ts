@@ -7,6 +7,41 @@ import { parseTallyResponse } from './xml/parseTallyResponse';
 /** Tally's XML interface speaks windows-1252. Sending UTF-8 mangles any non-ASCII character. */
 const TALLY_ENCODING = 'win1252';
 
+/** Raw round-trip, for read-only queries whose reply is not an import result. */
+export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (r: { ok: true; body: string } | { ok: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      resolve(r);
+    };
+    const body = iconv.encode(xml, TALLY_ENCODING);
+    const req = http.request(
+      {
+        host: cfg.tallyHost,
+        port: cfg.tallyPort,
+        method: 'POST',
+        path: '/',
+        timeout: cfg.tallyTimeoutMs,
+        headers: { 'Content-Type': 'text/xml;charset=windows-1252', 'Content-Length': body.length },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => done({ ok: true, body: iconv.decode(Buffer.concat(chunks), TALLY_ENCODING) }));
+      },
+    );
+    req.on('timeout', () => {
+      done({ ok: false, error: `Tally did not respond within ${cfg.tallyTimeoutMs}ms` });
+      req.destroy();
+    });
+    req.on('error', (err) => done({ ok: false, error: err.message }));
+    req.write(body);
+    req.end();
+  });
+}
+
 export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResult> {
   const body = iconv.encode(xml, TALLY_ENCODING);
 

@@ -140,11 +140,27 @@ would mark every failed invoice as synced.
 | `TALLY_LINEERROR` | Tally rejected it. The message is Tally's own text, usually a ledger name mismatch. |
 | `TALLY_NO_CHANGE` | Tally accepted the request but created and altered nothing. |
 
-## Repeat pushes are safe
+## Repeat pushes are safe — but not because of REMOTEID
 
-Every voucher carries `REMOTEID` (`TMS-INV-{invoiceId}`), which never changes for an invoice. Tally
-treats a repeat import of a known `REMOTEID` as an alter of that voucher rather than a new one, so
-a retry after a timeout cannot produce a duplicate.
+**`REMOTEID` does not deduplicate.** Verified against the client's Tally: importing the same
+voucher twice produced two vouchers, not an alter. The retry design originally assumed otherwise,
+which would have written double sales into their books.
+
+So `/tally/invoice` asks Tally first. It fetches the vouchers dated on the bill's own day — a
+small, bounded query — and skips the import when that bill number is already there, in either
+`VOUCHERNUMBER` or `REFERENCE`. Both are checked because Tally only keeps our number in
+`VOUCHERNUMBER` when the voucher type numbers manually; under an auto-numbering type it survives
+only in `REFERENCE`.
+
+The response then carries `action: "exists"` with `ok: true` — the bill is in Tally, which is what
+the caller needs to know.
+
+If the lookup itself fails, the import is **not** attempted: importing on a guess is exactly how
+duplicates happen. That returns `TALLY_UNREACHABLE` and is safe to retry.
+
+**Consequence worth knowing:** editing an invoice and pushing it again no longer updates the Tally
+voucher — it reports `exists` and leaves the original alone. Correcting a bill already in Tally is
+a manual job until an explicit alter path exists.
 
 ## Why not PM2
 

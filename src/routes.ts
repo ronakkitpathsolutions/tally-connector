@@ -6,7 +6,8 @@ import { requireSecret } from './auth';
 import { buildVoucherXml } from './xml/buildVoucherXml';
 import { buildInvoiceXml } from './xml/buildInvoiceXml';
 import { normalizeEduDate } from './xml/eduDate';
-import { postToTally } from './tallyClient';
+import { postToTally, postRawToTally } from './tallyClient';
+import { buildVoucherLookupXml, voucherNumberPresent } from './xml/buildVoucherLookupXml';
 import { probeTally } from './tallyHealth';
 import { InvoicePayload, VoucherPayload } from './types';
 
@@ -91,13 +92,41 @@ export function buildRouter(cfg: AppConfig): Router {
   });
 
   router.post('/tally/invoice', secured, async (req, res) => {
+    const body = req.body as InvoicePayload;
     let xml: string;
     try {
-      xml = renderInvoiceXml(req.body as InvoicePayload);
+      xml = renderInvoiceXml(body);
     } catch (err) {
       res.status(400).json({ ok: false, errorCode: 'BAD_PAYLOAD', error: (err as Error).message });
       return;
     }
+
+    // Ask Tally whether this bill is already there before importing. REMOTEID does not
+    // deduplicate — the same voucher imported twice becomes two vouchers, verified against the
+    // client's Tally — so without this a retry or a timeout writes double sales into their books.
+    const company = body.company || cfg.defaultCompany;
+    const date = resolveDate(body.date, body.billNo);
+    const lookup = await postRawToTally(cfg, buildVoucherLookupXml(company, date));
+    if (lookup.ok && voucherNumberPresent(lookup.body, body.billNo)) {
+      res.json({
+        ok: true,
+        action: 'exists',
+        voucherId: null,
+        rawXml: lookup.body,
+      });
+      return;
+    }
+    // A failed lookup is not treated as "absent": importing on a guess is how duplicates happen.
+    if (!lookup.ok) {
+      res.json({
+        ok: false,
+        errorCode: 'TALLY_UNREACHABLE',
+        error: `Could not check whether ${body.billNo} is already in Tally, so it was not imported — ${lookup.error}`,
+        rawXml: null,
+      });
+      return;
+    }
+
     res.json(await postToTally(cfg, xml));
   });
 

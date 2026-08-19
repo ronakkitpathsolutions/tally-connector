@@ -92,5 +92,5 @@ export type ConnectorErrorCode =
   | 'TALLY_NO_CHANGE';
 
 export type ConnectorResult =
-  | { ok: true; action: 'created' | 'altered'; voucherId: string | null; rawXml: string }
+  | { ok: true; action: 'created' | 'altered' | 'exists'; voucherId: string | null; rawXml: string }
   | { ok: false; errorCode: ConnectorErrorCode; error: string; rawXml: string | null };
