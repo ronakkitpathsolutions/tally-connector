@@ -57,12 +57,13 @@ describe('loadConfig', () => {
     expect(() => loadConfig(rest as NodeJS.ProcessEnv)).toThrow(/DEFAULT_COMPANY/);
   });
 
-  it('leaves educational mode off unless explicitly enabled', () => {
-    // The dangerous default is "on". Anything other than an explicit true/1 must read as off.
+  it('leaves educational mode off unless something affirmative is set', () => {
+    // Off is the safe default: on, it silently rewrites voucher dates. Absent, blank and any
+    // negative value must all read as off.
     expect(loadConfig(base as NodeJS.ProcessEnv).eduMode).toBe(false);
-    expect(loadConfig({ ...base, TALLY_EDU_MODE: 'false' } as NodeJS.ProcessEnv).eduMode).toBe(false);
-    expect(loadConfig({ ...base, TALLY_EDU_MODE: 'yes' } as NodeJS.ProcessEnv).eduMode).toBe(false);
-    expect(loadConfig({ ...base, TALLY_EDU_MODE: '' } as NodeJS.ProcessEnv).eduMode).toBe(false);
+    for (const v of ['false', 'FALSE', 'no', '0', '', '   ']) {
+      expect(loadConfig({ ...base, TALLY_EDU_MODE: v } as NodeJS.ProcessEnv).eduMode).toBe(false);
+    }
   });
 
   it('enables educational mode on true or 1', () => {
