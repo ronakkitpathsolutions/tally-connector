@@ -51,6 +51,26 @@ describe('buildInvoiceXml', () => {
     expect(xml).toContain('<REMOTEID>TMS-INV-44</REMOTEID>');
   });
 
+  it('defaults to the built-in Sales voucher type', () => {
+    const xml = buildInvoiceXml(igstInvoice);
+    expect(xml).toContain('VCHTYPE="Sales"');
+    expect(xml).toContain('<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>');
+  });
+
+  it('uses the voucher type the client actually posts sales under', () => {
+    // Not cosmetic: the built-in Sales type numbers vouchers automatically, so Tally discarded our
+    // bill number and stamped its own. Under "Sales Taxable" the bill number survives — verified
+    // against the client's Tally, where the voucher came back as T/2982/2026-27.
+    const xml = buildInvoiceXml({ ...igstInvoice, voucherType: 'Sales Taxable' });
+    expect(xml).toContain('VCHTYPE="Sales Taxable"');
+    expect(xml).toContain('<VOUCHERTYPENAME>Sales Taxable</VOUCHERTYPENAME>');
+    expect(xml).toContain('<VOUCHERNUMBER>T/2982/2026-27</VOUCHERNUMBER>');
+  });
+
+  it('falls back to Sales for a blank voucher type', () => {
+    expect(buildInvoiceXml({ ...igstInvoice, voucherType: '   ' })).toContain('VCHTYPE="Sales"');
+  });
+
   it('emits the GST buyer block', () => {
     const xml = buildInvoiceXml(igstInvoice);
     expect(xml).toContain('<BASICBUYERNAME>KILLICK NIXON LTD</BASICBUYERNAME>');

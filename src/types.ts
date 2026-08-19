@@ -63,6 +63,12 @@ export interface InvoiceParty extends VoucherParty {
 export interface InvoicePayload {
   remoteId: string;
   company: string;
+  /**
+   * Tally voucher type. The client's books post sales under "Sales Taxable", not the stock "Sales"
+   * type, and the voucher type also decides whether Tally accepts our voucher number or assigns
+   * its own — so this is not cosmetic.
+   */
+  voucherType?: string;
   /** YYYYMMDD. */
   date: string;
   billNo: string;

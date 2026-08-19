@@ -9,6 +9,9 @@ import { buildMastersXml } from './buildMastersXml';
 // so this is the correct view as well as the one that imports.
 const VOUCHER_VIEW = 'Accounting Voucher View';
 
+/** Tally's own built-in type; the client overrides this per their chart of accounts. */
+const DEFAULT_VOUCHER_TYPE = 'Sales';
+
 const TOLERANCE = 0.005;
 
 const isZero = (n: number): boolean => Math.abs(n) < TOLERANCE;
@@ -83,6 +86,7 @@ export function buildInvoiceXml(payload: InvoicePayload, options: { createMaster
     );
   }
 
+  const voucherType = escapeXml(payload.voucherType?.trim() || DEFAULT_VOUCHER_TYPE);
   const party = escapeXml(payload.party.ledgerName);
   const addressLines = (payload.party.address ?? [])
     .filter((line) => line.trim())
@@ -102,11 +106,11 @@ export function buildInvoiceXml(payload: InvoicePayload, options: { createMaster
     (options.createMasters ? buildMastersXml(payload) : '') +
     '<TALLYMESSAGE xmlns:UDF="TallyUDF">' +
     // ACTION stays "Create": when Tally already knows the REMOTEID it alters that voucher instead.
-    `<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="${VOUCHER_VIEW}">` +
+    `<VOUCHER VCHTYPE="${voucherType}" ACTION="Create" OBJVIEW="${VOUCHER_VIEW}">` +
     `<REMOTEID>${escapeXml(payload.remoteId)}</REMOTEID>` +
     `<DATE>${escapeXml(payload.date)}</DATE>` +
     `<EFFECTIVEDATE>${escapeXml(payload.date)}</EFFECTIVEDATE>` +
-    '<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>' +
+    `<VOUCHERTYPENAME>${voucherType}</VOUCHERTYPENAME>` +
     `<VOUCHERNUMBER>${escapeXml(payload.billNo)}</VOUCHERNUMBER>` +
     `<REFERENCE>${escapeXml(payload.billNo)}</REFERENCE>` +
     `<REFERENCEDATE>${escapeXml(payload.date)}</REFERENCEDATE>` +
