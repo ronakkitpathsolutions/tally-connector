@@ -78,7 +78,8 @@ uninstall.bat
 | `PORT` | Connector port. `4000`, and the Cloudflare Tunnel origin must match. |
 | `HOST` | Address this PC is reachable at, used both to bind and to reach Tally. Default `127.0.0.1`. See the warning below. |
 | `SHARED_SECRET` | Must equal `TALLY_CONNECTOR_SECRET` on the TMS backend, or every request gets a 401. |
-| `TALLY_PORT` | Port the target TallyPrime listens on. `9001` — see below. |
+| `TALLY_PORT` | Port vouchers are written to. `9001` — see below. |
+| `TALLY_MASTERS_PORT` | Port master names are **read** from, when the live company runs as a separate TallyPrime. Defaults to `TALLY_PORT`; the import paths never use it. |
 | `TALLY_TIMEOUT_MS` | How long to wait for Tally before giving up. Default 30000. |
 | `DEFAULT_COMPANY` | Exact Tally company name, used when the backend sends a blank company. |
 | `TALLY_EDU_MODE` | **Testing only.** See below. Keep `false` in production. |

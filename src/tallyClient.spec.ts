@@ -10,6 +10,7 @@ function cfgFor(port: number, timeoutMs = 5000): AppConfig {
     sharedSecret: 's',
     tallyHost: '127.0.0.1',
     tallyPort: port,
+    mastersPort: 9001,
     tallyTimeoutMs: timeoutMs,
     defaultCompany: 'C',
     eduMode: false,

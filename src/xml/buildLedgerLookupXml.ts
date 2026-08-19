@@ -26,9 +26,17 @@ function unescapeXml(value: string): string {
     .replace(/&amp;/g, '&');
 }
 
-/** Ledger names present in the company, lower-cased for comparison. */
-export function ledgerNamesIn(xml: string): Set<string> {
-  const names = [...xml.matchAll(/<LEDGER NAME="([^"]*)"/g)].map((m) => unescapeXml(m[1]).trim().toLowerCase());
+/**
+ * Ledger names present in the company.
+ *
+ * Lower-cased by default because the callers that compare want that; `preserveCase` returns Tally's
+ * own spelling, which is what has to be stored — Tally matches names verbatim, so a mapping saved
+ * in the wrong case would point at a ledger that does not exist.
+ */
+export function ledgerNamesIn(xml: string, options: { preserveCase?: boolean } = {}): Set<string> {
+  const names = [...xml.matchAll(/<LEDGER NAME="([^"]*)"/g)]
+    .map((m) => unescapeXml(m[1]).trim())
+    .map((n) => (options.preserveCase ? n : n.toLowerCase()));
   return new Set(names.filter(Boolean));
 }
 

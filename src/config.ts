@@ -12,6 +12,11 @@ export interface AppConfig {
    */
   eduMode: boolean;
   /**
+   * Port to read master names from, which may be a different TallyPrime instance to the one
+   * vouchers are written to. Defaults to tallyPort.
+   */
+  mastersPort: number;
+  /**
    * Create missing ledgers alongside the voucher. Off by default: against a real company a mapping
    * typo would silently become a new ledger instead of a loud failure.
    */
@@ -56,6 +61,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     // 9001, not Tally's 9000: on the client's terminal server 9000 belongs to the TallyPrime
     // instance holding their live books.
     tallyPort: Number(env.TALLY_PORT ?? 9001),
+    // Read-only, and deliberately its own setting rather than a request parameter: the client's
+    // live company is on another port, and its ledger names are what the portal must map against.
+    // Letting a caller choose the port would let an import reach the live books by mistake — the
+    // write paths never look at this.
+    mastersPort: Number(env.TALLY_MASTERS_PORT ?? env.TALLY_PORT ?? 9001),
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
     eduMode: flag(env.TALLY_EDU_MODE),

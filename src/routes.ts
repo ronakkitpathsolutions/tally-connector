@@ -9,7 +9,7 @@ import { normalizeEduDate } from './xml/eduDate';
 import { postToTally, postRawToTally } from './tallyClient';
 import { buildVoucherLookupXml, voucherNumberPresent } from './xml/buildVoucherLookupXml';
 import { buildMastersImportXml } from './xml/buildMastersXml';
-import { ledgersRequiredBy } from './xml/buildLedgerLookupXml';
+import { buildLedgerLookupXml, ledgerNamesIn, ledgersRequiredBy } from './xml/buildLedgerLookupXml';
 import { matchToPayloadLedger, parseMissingLedger } from './xml/parseMissingLedger';
 import { probeTally } from './tallyHealth';
 import { queueDepth } from './tallyQueue';
@@ -189,6 +189,26 @@ export function buildRouter(cfg: AppConfig): Router {
       });
     }
     res.json(result);
+  });
+
+  /**
+   * Every ledger name in the company, for the portal to map its masters against.
+   *
+   * Read-only and deliberately not part of a push: the client's real company holds 5,218 ledgers,
+   * which is fine to fetch once when someone asks and ruinous to fetch per invoice.
+   */
+  router.get('/tally/ledgers', secured, async (req, res) => {
+    const company = String(req.query.company ?? '') || cfg.defaultCompany;
+    // Reads from mastersPort, which may be the live company; imports always use tallyPort.
+    const reply = await postRawToTally({ ...cfg, tallyPort: cfg.mastersPort }, buildLedgerLookupXml(company));
+    if (!reply.ok) {
+      log.error('ledger list failed', { company, reason: reply.error });
+      res.json({ ok: false, errorCode: 'TALLY_UNREACHABLE', error: reply.error });
+      return;
+    }
+    const ledgers = [...ledgerNamesIn(reply.body, { preserveCase: true })];
+    log.info('ledger list served', { company, port: cfg.mastersPort, count: ledgers.length });
+    res.json({ ok: true, company, count: ledgers.length, ledgers });
   });
 
   router.post('/admin/update', secured, (_req, res) => {

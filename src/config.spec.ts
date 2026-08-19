@@ -15,6 +15,19 @@ describe('loadConfig', () => {
     expect(c.defaultCompany).toBe('PRATHAM TRANSPORT PVT LTD');
   });
 
+  it('reads masters from the voucher port unless told otherwise', () => {
+    expect(loadConfig(base as NodeJS.ProcessEnv).mastersPort).toBe(9001);
+    expect(loadConfig({ ...base, TALLY_PORT: '9005' } as NodeJS.ProcessEnv).mastersPort).toBe(9005);
+  });
+
+  it('reads masters from a different Tally when TALLY_MASTERS_PORT is set', () => {
+    // The client's live company sits on another port; its ledger names are what the portal maps
+    // against, while vouchers still go to the test instance.
+    const c = loadConfig({ ...base, TALLY_PORT: '9001', TALLY_MASTERS_PORT: '9000' } as NodeJS.ProcessEnv);
+    expect(c.mastersPort).toBe(9000);
+    expect(c.tallyPort).toBe(9001);
+  });
+
   it('honours an explicit TALLY_PORT', () => {
     expect(loadConfig({ ...base, TALLY_PORT: '9000' } as NodeJS.ProcessEnv).tallyPort).toBe(9000);
   });

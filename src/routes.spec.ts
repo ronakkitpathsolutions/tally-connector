@@ -9,7 +9,8 @@ const cfg: AppConfig = {
   host: '127.0.0.1',
   sharedSecret: 'top-secret',
   tallyHost: '127.0.0.1',
-  tallyPort: 1, // nothing listens here
+  tallyPort: 1,
+  mastersPort: 9001, // nothing listens here
   tallyTimeoutMs: 500,
   defaultCompany: 'PRATHAM TRANSPORT PVT LTD',
   eduMode: false,
