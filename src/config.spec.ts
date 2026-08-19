@@ -70,5 +70,18 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, TALLY_EDU_MODE: '1' } as NodeJS.ProcessEnv).eduMode).toBe(true);
   });
 
+  it('accepts the casings someone actually types in a .env', () => {
+    // Exact-'true' matching meant TRUE and True read as off while looking set in the file.
+    for (const v of ['TRUE', 'True', 'yes', 'YES', 'on', ' true ']) {
+      expect(loadConfig({ ...base, ALLOW_MASTER_CREATE: v } as NodeJS.ProcessEnv).allowMasterCreate).toBe(true);
+    }
+  });
+
+  it('still treats anything else as off', () => {
+    for (const v of ['false', 'FALSE', 'no', '0', '', '  ']) {
+      expect(loadConfig({ ...base, ALLOW_MASTER_CREATE: v } as NodeJS.ProcessEnv).allowMasterCreate).toBe(false);
+    }
+  });
+
 
 });

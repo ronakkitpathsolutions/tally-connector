@@ -25,6 +25,15 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 }
 
 /**
+ * Reads a boolean env var forgivingly. Matching only the exact string 'true' meant TRUE, True and
+ * yes all read as off, silently — the setting looked present in .env and did nothing.
+ */
+function flag(value: string | undefined): boolean {
+  const v = value?.trim().toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+}
+
+/**
  * Interface to listen on. `127.0.0.1` reaches only this machine; `0.0.0.0` binds every interface,
  * so both http://localhost:4000 and http://<lan-ip>:4000 work.
  *
@@ -49,7 +58,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     tallyPort: Number(env.TALLY_PORT ?? 9001),
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
-    eduMode: env.TALLY_EDU_MODE === 'true' || env.TALLY_EDU_MODE === '1',
-    allowMasterCreate: env.ALLOW_MASTER_CREATE === 'true' || env.ALLOW_MASTER_CREATE === '1',
+    eduMode: flag(env.TALLY_EDU_MODE),
+    allowMasterCreate: flag(env.ALLOW_MASTER_CREATE),
   };
 }

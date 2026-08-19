@@ -25,6 +25,14 @@ export function buildRouter(cfg: AppConfig): Router {
     res.json({
       status: 'ok',
       tally,
+      // The effective settings, so a misconfigured connector can be spotted from outside instead
+      // of guessed at. No secrets here — only what is already visible in the XML it sends.
+      config: {
+        tallyPort: cfg.tallyPort,
+        defaultCompany: cfg.defaultCompany,
+        allowMasterCreate: cfg.allowMasterCreate,
+        eduMode: cfg.eduMode,
+      },
       ...(tally === 'not-responding'
         ? { hint: 'Tally is open but not answering — check for a dialog box on its screen.' }
         : {}),
