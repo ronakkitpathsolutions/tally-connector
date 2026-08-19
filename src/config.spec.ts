@@ -16,13 +16,22 @@ describe('loadConfig', () => {
     expect(c.defaultCompany).toBe('PRATHAM TRANSPORT PVT LTD');
   });
 
-  it('always reaches Tally on loopback, with no env knob to change it', () => {
-    // Tally and the connector are always on the same PC. Keeping this out of .env removes a
-    // setting that could only ever be wrong, and avoids a HOST var that reads like a bind address.
-    expect(loadConfig(base as NodeJS.ProcessEnv).tallyHost).toBe('127.0.0.1');
-    expect(loadConfig({ ...base, TALLY_HOST: '10.0.0.5', HOST: '10.0.0.5' } as NodeJS.ProcessEnv).tallyHost).toBe(
-      '127.0.0.1',
-    );
+  it('defaults both the bind address and the Tally host to loopback', () => {
+    const c = loadConfig(base as NodeJS.ProcessEnv);
+    expect(c.host).toBe('127.0.0.1');
+    expect(c.tallyHost).toBe('127.0.0.1');
+  });
+
+  it('uses HOST for both, since Tally runs on the same PC', () => {
+    const c = loadConfig({ ...base, HOST: '192.168.0.92' } as NodeJS.ProcessEnv);
+    expect(c.host).toBe('192.168.0.92');
+    expect(c.tallyHost).toBe('192.168.0.92');
+  });
+
+  it('falls back to loopback for a blank HOST', () => {
+    // An empty value in .env must not turn into a bind on '' — that binds every interface.
+    expect(loadConfig({ ...base, HOST: '' } as NodeJS.ProcessEnv).host).toBe('127.0.0.1');
+    expect(loadConfig({ ...base, HOST: '   ' } as NodeJS.ProcessEnv).host).toBe('127.0.0.1');
   });
 
   it('throws when SHARED_SECRET is missing', () => {
@@ -48,9 +57,9 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, TALLY_EDU_MODE: '1' } as NodeJS.ProcessEnv).eduMode).toBe(true);
   });
 
-  it('never binds 0.0.0.0 even if asked', () => {
-    // Binding a wider interface would expose the connector to the client's whole office LAN.
-    const c = loadConfig({ ...base, HOST: '0.0.0.0' } as NodeJS.ProcessEnv);
-    expect(c.host).toBe('127.0.0.1');
+  it('honours an explicit 0.0.0.0', () => {
+    // Allowed, but it binds every interface — the shared secret is then the only thing guarding
+    // :4000. Kept as a test so the exposure is a stated behaviour rather than an accident.
+    expect(loadConfig({ ...base, HOST: '0.0.0.0' } as NodeJS.ProcessEnv).host).toBe('0.0.0.0');
   });
 });

@@ -86,6 +86,7 @@ REM cmd reads the trailing 0 as a file handle and redirects stdin instead, so an
 REM value ending in a digit silently corrupts the line. Leading redirection is
 REM immune to that.
 >".env"  echo PORT=4000
+>>".env" echo HOST=192.168.0.92
 >>".env" echo SHARED_SECRET=!SHARED_SECRET!
 >>".env" echo TALLY_PORT=!TALLY_PORT!
 >>".env" echo TALLY_TIMEOUT_MS=30000

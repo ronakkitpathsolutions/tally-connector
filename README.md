@@ -18,9 +18,12 @@ tally.tally-connector.store
    TallyPrime :9000
 ```
 
-Tally's port `9000` is never exposed to the internet, and because the connector binds `127.0.0.1`
-rather than `0.0.0.0`, nobody on the office LAN can reach `:4000` directly either — only
-`cloudflared`, running locally on the same machine.
+Tally's port `9000` is never exposed to the internet.
+
+By default the connector binds `127.0.0.1`, so nobody on the office LAN can reach `:4000` either —
+only `cloudflared`, running locally on the same machine. Setting `HOST` to a LAN address (useful
+in development, when the backend runs on another machine) drops that: `:4000` becomes reachable
+from the whole network, and the shared secret is then the only thing guarding it.
 
 ## Prerequisites
 
@@ -62,6 +65,7 @@ uninstall.bat
 | Variable | Purpose |
 |---|---|
 | `PORT` | Connector port. `4000`, and the Cloudflare Tunnel origin must match. |
+| `HOST` | Address this PC is reachable at, used both to bind and to reach Tally. Default `127.0.0.1`. See the warning below. |
 | `SHARED_SECRET` | Must equal `TALLY_CONNECTOR_SECRET` on the TMS backend, or every request gets a 401. |
 | `TALLY_PORT` | `9000` |
 | `TALLY_TIMEOUT_MS` | How long to wait for Tally before giving up. Default 30000. |

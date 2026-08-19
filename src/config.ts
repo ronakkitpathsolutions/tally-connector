@@ -19,15 +19,22 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
   return value;
 }
 
+/** The address this PC is reachable at — used both to bind and to reach Tally. */
+function hostOf(env: NodeJS.ProcessEnv): string {
+  return env.HOST?.trim() || '127.0.0.1';
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   return {
     port: Number(env.PORT ?? 4000),
-    // Neither host is configurable, and both are loopback for the same reason: the connector and
-    // TallyPrime always run on the one office PC. Binding wider would expose the connector to the
-    // office LAN, and a settable Tally host could only ever be set wrong.
-    host: '127.0.0.1',
+    // One HOST for both, because the connector and TallyPrime run on the same PC — it is the
+    // address this machine is reachable at, and the address Tally is listening on.
+    //
+    // Defaults to loopback. Setting it to a LAN address makes :4000 reachable from the whole
+    // office network, after which the shared secret is the only thing guarding it.
+    host: hostOf(env),
     sharedSecret: required(env, 'SHARED_SECRET'),
-    tallyHost: '127.0.0.1',
+    tallyHost: hostOf(env),
     tallyPort: Number(env.TALLY_PORT ?? 9000),
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
