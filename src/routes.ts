@@ -9,7 +9,7 @@ import { normalizeEduDate } from './xml/eduDate';
 import { postToTally, postRawToTally } from './tallyClient';
 import { buildVoucherLookupXml, voucherNumberPresent } from './xml/buildVoucherLookupXml';
 import { buildMastersImportXml } from './xml/buildMastersXml';
-import { buildLedgerLookupXml, ledgerNamesIn, ledgersRequiredBy } from './xml/buildLedgerLookupXml';
+import { buildLedgerLookupXml, ledgerNamesIn, ledgersRequiredBy, ledgersWithGroups } from './xml/buildLedgerLookupXml';
 import { matchToPayloadLedger, parseMissingLedger } from './xml/parseMissingLedger';
 import { probeTally } from './tallyHealth';
 import { queueDepth } from './tallyQueue';
@@ -206,7 +206,8 @@ export function buildRouter(cfg: AppConfig): Router {
       res.json({ ok: false, errorCode: 'TALLY_UNREACHABLE', error: reply.error });
       return;
     }
-    const ledgers = [...ledgerNamesIn(reply.body, { preserveCase: true })];
+    // Names and groups, because a customer must only ever be mapped to a Sundry Debtor.
+    const ledgers = ledgersWithGroups(reply.body);
     log.info('ledger list served', { company, port: cfg.mastersPort, count: ledgers.length });
     res.json({ ok: true, company, count: ledgers.length, ledgers });
   });

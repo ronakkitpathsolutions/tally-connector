@@ -1,4 +1,4 @@
-import { buildLedgerLookupXml, ledgerNamesIn, ledgersRequiredBy, missingLedgers } from './buildLedgerLookupXml';
+import { buildLedgerLookupXml, ledgerNamesIn, ledgersRequiredBy, ledgersWithGroups, missingLedgers } from './buildLedgerLookupXml';
 import { buildMastersImportXml } from './buildMastersXml';
 import { InvoicePayload } from '../types';
 
@@ -84,5 +84,29 @@ describe('buildMastersImportXml', () => {
     expect(xml).toContain('<TALLYREQUEST>Import Data</TALLYREQUEST>');
     expect(xml).toContain('<REPORTNAME>All Masters</REPORTNAME>');
     expect(xml).toContain('<SVCURRENTCOMPANY>PRATHAM TEST COMPANY</SVCURRENTCOMPANY>');
+  });
+});
+
+describe('ledgersWithGroups', () => {
+  const xml = `
+    <LEDGER NAME="PRASHANT CASTECH PVT LTD"><PARENT>Sundry Debtors</PARENT></LEDGER>
+    <LEDGER NAME="R &amp; B LOGISTICS"><PARENT>Sundry Creditors</PARENT></LEDGER>
+    <LEDGER NAME="Cash"></LEDGER>
+  `;
+
+  it('reads each ledger with the group it sits under', () => {
+    expect(ledgersWithGroups(xml)).toEqual([
+      { name: 'PRASHANT CASTECH PVT LTD', parent: 'Sundry Debtors' },
+      { name: 'R & B LOGISTICS', parent: 'Sundry Creditors' },
+      { name: 'Cash', parent: '' },
+    ]);
+  });
+
+  it('skips a ledger with no name', () => {
+    expect(ledgersWithGroups('<LEDGER NAME=""><PARENT>X</PARENT></LEDGER>')).toEqual([]);
+  });
+
+  it('returns nothing for an empty response', () => {
+    expect(ledgersWithGroups('<ENVELOPE></ENVELOPE>')).toEqual([]);
   });
 });

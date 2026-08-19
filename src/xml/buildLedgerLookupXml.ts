@@ -10,7 +10,8 @@ export function buildLedgerLookupXml(company: string): string {
     `<SVCURRENTCOMPANY>${escapeXml(company)}</SVCURRENTCOMPANY>` +
     '</STATICVARIABLES>' +
     '<TDL><TDLMESSAGE>' +
-    '<COLLECTION NAME="LedgerLookup" ISINITIALIZE="Yes"><TYPE>Ledger</TYPE><NATIVEMETHOD>Name</NATIVEMETHOD></COLLECTION>' +
+    '<COLLECTION NAME="LedgerLookup" ISINITIALIZE="Yes"><TYPE>Ledger</TYPE>' +
+    '<NATIVEMETHOD>Name</NATIVEMETHOD><NATIVEMETHOD>Parent</NATIVEMETHOD></COLLECTION>' +
     '</TDLMESSAGE></TDL>' +
     '</DESC></BODY>' +
     '</ENVELOPE>'
@@ -70,4 +71,23 @@ export function ledgersRequiredBy(payload: InvoicePayload): string[] {
  */
 export function missingLedgers(payload: InvoicePayload, existing: Set<string>): string[] {
   return ledgersRequiredBy(payload).filter((name) => !existing.has(name.toLowerCase()));
+}
+
+/**
+ * Ledger names with the group each sits under.
+ *
+ * The group matters when mapping: a customer must only ever match a ledger under Sundry Debtors.
+ * Their books hold 1,384 creditors against 809 debtors, and plenty of parties appear as both — so
+ * matching on name alone would sometimes point a customer at their vendor account and post sales
+ * into it, with no error anywhere.
+ */
+export function ledgersWithGroups(xml: string): Array<{ name: string; parent: string }> {
+  const out: Array<{ name: string; parent: string }> = [];
+  for (const block of xml.matchAll(/<LEDGER NAME="([^"]*)"[^>]*>([\s\S]*?)<\/LEDGER>/g)) {
+    const name = unescapeXml(block[1]).trim();
+    if (!name) continue;
+    const parent = /<PARENT[^>]*>([^<]*)<\/PARENT>/.exec(block[2]);
+    out.push({ name, parent: parent ? unescapeXml(parent[1]).trim() : '' });
+  }
+  return out;
 }
