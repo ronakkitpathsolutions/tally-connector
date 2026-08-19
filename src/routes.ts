@@ -8,8 +8,9 @@ import { buildInvoiceXml } from './xml/buildInvoiceXml';
 import { normalizeEduDate } from './xml/eduDate';
 import { postToTally, postRawToTally } from './tallyClient';
 import { buildVoucherLookupXml, voucherNumberPresent } from './xml/buildVoucherLookupXml';
-import { buildLedgerLookupXml, ledgerNamesIn, missingLedgers } from './xml/buildLedgerLookupXml';
 import { buildMastersImportXml } from './xml/buildMastersXml';
+import { ledgersRequiredBy } from './xml/buildLedgerLookupXml';
+import { matchToPayloadLedger, parseMissingLedger } from './xml/parseMissingLedger';
 import { probeTally } from './tallyHealth';
 import { queueDepth } from './tallyQueue';
 import { log } from './logger';
@@ -148,38 +149,34 @@ export function buildRouter(cfg: AppConfig): Router {
       return;
     }
 
-    // Create only what Tally is missing, then import. Checking first means a repeat push asks
-    // Tally to create nothing, and a ledger that already exists is never touched.
-    if (cfg.allowMasterCreate) {
-      const ledgers = await postRawToTally(cfg, buildLedgerLookupXml(company));
-      if (!ledgers.ok) {
-        log.error('ledger lookup failed, not imported', { billNo: body.billNo, reason: ledgers.error, took: took() });
-        res.json({
-          ok: false,
-          errorCode: 'TALLY_UNREACHABLE',
-          error: `Could not read Tally's ledgers, so nothing was imported — ${ledgers.error}`,
-          rawXml: null,
-        });
-        return;
+    // Import first, and let Tally name what is missing, rather than downloading the company's
+    // ledger list to find out. That list is 5,218 entries in the client's real company; fetching it
+    // per invoice made a 50-invoice batch take minutes and blocked a Tally four other people use.
+    // In the normal case — every ledger already there — this costs one request and no lookup.
+    //
+    // Tally reports one missing ledger at a time, so a voucher short of several needs a round each.
+    // The cap is the number of ledgers this voucher could possibly need, so the loop cannot spin.
+    const payloadLedgers = ledgersRequiredBy({ ...body, company, date });
+    let result = await postToTally(cfg, xml);
+
+    for (let round = 0; cfg.allowMasterCreate && !result.ok && round < payloadLedgers.length; round += 1) {
+      if (result.errorCode !== 'TALLY_LINEERROR') break;
+
+      const named = parseMissingLedger(result.error);
+      const toCreate = named ? matchToPayloadLedger(named, payloadLedgers) : null;
+      // Only ever create a name this voucher itself asked for. Any other "does not exist" text
+      // from Tally is left alone rather than turned into a ledger in the client's books.
+      if (!toCreate) break;
+
+      log.info('creating missing ledger', { billNo: body.billNo, ledger: toCreate, round: round + 1 });
+      const created = await postToTally(cfg, buildMastersImportXml({ ...body, company, date }, [toCreate]));
+      if (!created.ok) {
+        log.error('ledger creation failed', { billNo: body.billNo, ledger: toCreate, reason: created.error });
+        break;
       }
-      const missing = missingLedgers({ ...body, company, date }, ledgerNamesIn(ledgers.body));
-      if (missing.length) {
-        log.info('creating missing ledgers', { billNo: body.billNo, ledgers: missing });
-        const created = await postToTally(cfg, buildMastersImportXml({ ...body, company, date }, missing));
-        if (!created.ok) {
-          log.error('ledger creation failed', { billNo: body.billNo, ledgers: missing, reason: created.error });
-          res.json({
-            ok: false,
-            errorCode: created.errorCode,
-            error: `Could not create the missing ledgers (${missing.join(', ')}) — ${created.error}`,
-            rawXml: created.rawXml,
-          });
-          return;
-        }
-      }
+      result = await postToTally(cfg, xml);
     }
 
-    const result = await postToTally(cfg, xml);
     if (result.ok) {
       log.info('imported', { billNo: body.billNo, action: result.action, voucherId: result.voucherId, took: took() });
     } else {
