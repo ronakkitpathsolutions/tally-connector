@@ -11,6 +11,11 @@ export interface AppConfig {
    * Educational version accepts. Must stay off against a licensed Tally.
    */
   eduMode: boolean;
+  /**
+   * Create missing ledgers alongside the voucher. Off by default: against a real company a mapping
+   * typo would silently become a new ledger instead of a loud failure.
+   */
+  allowMasterCreate: boolean;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -39,5 +44,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
     eduMode: env.TALLY_EDU_MODE === 'true' || env.TALLY_EDU_MODE === '1',
+    allowMasterCreate: env.ALLOW_MASTER_CREATE === 'true' || env.ALLOW_MASTER_CREATE === '1',
   };
 }

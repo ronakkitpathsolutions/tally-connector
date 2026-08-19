@@ -13,6 +13,7 @@ const cfg: AppConfig = {
   tallyTimeoutMs: 500,
   defaultCompany: 'PRATHAM TRANSPORT PVT LTD',
   eduMode: false,
+  allowMasterCreate: false,
 };
 
 const app = express().use(express.json()).use(buildRouter(cfg));

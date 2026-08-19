@@ -86,11 +86,14 @@ export function buildRouter(cfg: AppConfig): Router {
   // The full GST Sales Invoice, kept alongside /tally/voucher rather than replacing it: at the
   // client's office we need to try both and see which shape their Tally release actually accepts.
   const renderInvoiceXml = (body: InvoicePayload): string =>
-    buildInvoiceXml({
-      ...body,
-      company: body.company || cfg.defaultCompany,
-      date: resolveDate(body.date, body.billNo),
-    });
+    buildInvoiceXml(
+      {
+        ...body,
+        company: body.company || cfg.defaultCompany,
+        date: resolveDate(body.date, body.billNo),
+      },
+      { createMasters: cfg.allowMasterCreate },
+    );
 
   router.post('/tally/invoice/preview', secured, (req, res) => {
     try {

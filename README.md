@@ -71,6 +71,7 @@ uninstall.bat
 | `TALLY_TIMEOUT_MS` | How long to wait for Tally before giving up. Default 30000. |
 | `DEFAULT_COMPANY` | Exact Tally company name, used when the backend sends a blank company. |
 | `TALLY_EDU_MODE` | **Testing only.** See below. Keep `false` in production. |
+| `ALLOW_MASTER_CREATE` | **Testing only.** Creates missing ledgers alongside the voucher. Keep `false` in production. |
 
 ### `TALLY_EDU_MODE`
 

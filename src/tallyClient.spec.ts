@@ -13,6 +13,7 @@ function cfgFor(port: number, timeoutMs = 5000): AppConfig {
     tallyTimeoutMs: timeoutMs,
     defaultCompany: 'C',
     eduMode: false,
+    allowMasterCreate: false,
   };
 }
 

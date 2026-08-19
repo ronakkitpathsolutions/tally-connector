@@ -1,5 +1,6 @@
 import { InvoiceLine, InvoicePayload, TaxLine } from '../types';
 import { escapeXml, formatAmount } from './escape';
+import { buildMastersXml } from './buildMastersXml';
 
 /** Half a paisa — rounded GST halves routinely leave sub-paisa dust. */
 const TOLERANCE = 0.005;
@@ -53,7 +54,7 @@ function taxLineXml(tax: TaxLine): string {
  * Renders a GST Sales Invoice. Services only — freight and agency charges against SAC codes — so
  * there are no INVENTORYENTRIES; every charge posts as its own accounting line.
  */
-export function buildInvoiceXml(payload: InvoicePayload): string {
+export function buildInvoiceXml(payload: InvoicePayload, options: { createMasters?: boolean } = {}): string {
   const lines = payload.lines.filter((l) => !isZero(l.amount));
   if (lines.length === 0) {
     throw new Error('Invoice has no sales lines with a non-zero amount');
@@ -91,6 +92,8 @@ export function buildInvoiceXml(payload: InvoicePayload): string {
     `<STATICVARIABLES><SVCURRENTCOMPANY>${escapeXml(payload.company)}</SVCURRENTCOMPANY></STATICVARIABLES>` +
     '</REQUESTDESC>' +
     '<REQUESTDATA>' +
+    // Ledgers first: Tally applies messages in order, so the voucher below finds them already there.
+    (options.createMasters ? buildMastersXml(payload) : '') +
     '<TALLYMESSAGE xmlns:UDF="TallyUDF">' +
     // ACTION stays "Create": when Tally already knows the REMOTEID it alters that voucher instead.
     '<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">' +
