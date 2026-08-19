@@ -21,6 +21,44 @@ const withErrors = `<ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><IM
 <ERRORS>1</ERRORS><EXCEPTIONS>0</EXCEPTIONS>
 </IMPORTRESULT></DATA></BODY></ENVELOPE>`;
 
+// Captured verbatim from the client's TallyPrime. This is the shape it actually returns for an
+// import: a bare <RESPONSE> root, not the ENVELOPE/BODY/DATA/IMPORTRESULT the docs describe.
+const realCreated = `<RESPONSE>\r\n <CREATED>1</CREATED>\r\n <ALTERED>0</ALTERED>\r\n <DELETED>0</DELETED>\r\n <LASTVCHID>7</LASTVCHID>\r\n <LASTMID>0</LASTMID>\r\n <COMBINED>0</COMBINED>\r\n <IGNORED>0</IGNORED>\r\n <ERRORS>0</ERRORS>\r\n <CANCELLED>0</CANCELLED>\r\n <EXCEPTIONS>0</EXCEPTIONS>\r\n</RESPONSE>`;
+
+const realLineError = `<RESPONSE>\r\n <LINEERROR>The Base Currency Symbol is required!</LINEERROR>\r\n <CREATED>0</CREATED>\r\n <ALTERED>0</ALTERED>\r\n <ERRORS>1</ERRORS>\r\n <EXCEPTIONS>0</EXCEPTIONS>\r\n</RESPONSE>`;
+
+const realException = `<RESPONSE>\r\n <CREATED>0</CREATED>\r\n <ALTERED>0</ALTERED>\r\n <LASTVCHID>0</LASTVCHID>\r\n <ERRORS>0</ERRORS>\r\n <EXCEPTIONS>1</EXCEPTIONS>\r\n</RESPONSE>`;
+
+describe('parseTallyResponse — the shape real Tally returns', () => {
+  it('reads a bare <RESPONSE> import result as success', () => {
+    // This exact response was reported as a FAILURE by the ENVELOPE-only parser, while the voucher
+    // had in fact been created. In production that reads as "push failed" and invites a retry,
+    // which duplicates the voucher — the worst outcome this system can produce.
+    const r = parseTallyResponse(realCreated);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.action).toBe('created');
+      expect(r.voucherId).toBe('7');
+    }
+  });
+
+  it('reads a LINEERROR inside a bare <RESPONSE>', () => {
+    const r = parseTallyResponse(realLineError);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errorCode).toBe('TALLY_LINEERROR');
+      expect(r.error).toContain('Base Currency Symbol');
+    }
+  });
+
+  it('treats a bare <RESPONSE> with only an exception as failure', () => {
+    // Tally rejects a voucher this way — EXCEPTIONS 1, no LINEERROR, and an HTTP 200.
+    const r = parseTallyResponse(realException);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errorCode).toBe('TALLY_NO_CHANGE');
+  });
+});
+
 describe('parseTallyResponse', () => {
   it('reports a created voucher with its LASTVCHID', () => {
     const r = parseTallyResponse(created);
