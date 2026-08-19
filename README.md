@@ -113,12 +113,32 @@ Before trusting the end-to-end path, pull the XML from the preview route and imp
 **by hand**. That separates "the XML is wrong" from "the network is wrong", which are otherwise
 very hard to tell apart from a single failure.
 
+## Logs
+
+One file per day in `logs\`, named `tally-connector-YYYY-MM-DD.log`, alongside the console:
+
+```
+2026-08-19T15:55:36.629Z INFO  push received {"billNo":"T/2982/2026-27","company":"...","queued":0}
+2026-08-19T15:55:36.812Z INFO  creating missing ledgers {"billNo":"...","ledgers":["PRASHANT CASTECH PVT LTD"]}
+2026-08-19T15:55:37.104Z INFO  imported {"billNo":"T/2982/2026-27","action":"created","voucherId":"7","took":"475ms"}
+2026-08-19T15:56:02.310Z ERROR Tally rejected the voucher {"billNo":"...","errorCode":"TALLY_LINEERROR","reason":"Ledger 'X' does not exist!"}
+```
+
+Tally's own wording is kept verbatim — a paraphrase in the log is a paraphrase in every bug report.
+
+`queued` is how many Tally calls were waiting; consistently above 1 means pushes are arriving
+faster than Tally answers.
+
+The shared secret is redacted before anything is written, because logs get pasted into chats and
+screenshots. Files older than 30 days are deleted at startup, and only files this logger wrote are
+ever touched.
+
 ## Operating
 
 ```cmd
 nssm restart TallyConnector     :: or: schtasks /end + /run, on the fallback path
 nssm status TallyConnector
-type logs\connector-error.log
+type logs\tally-connector-2026-08-19.log
 ```
 
 Shipping a fix without visiting the PC: `POST /admin/update` with the shared secret. The process

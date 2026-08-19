@@ -2,17 +2,20 @@ import 'dotenv/config';
 import express from 'express';
 import { loadConfig } from './config';
 import { buildRouter } from './routes';
-import { log, setLogSecrets } from './logger';
+import { log, pruneOldLogs, setLogSecrets } from './logger';
 
 const cfg = loadConfig(process.env);
 // Registered before anything else can log, so the secret cannot reach a file even on a crash.
 setLogSecrets([cfg.sharedSecret]);
+
+const pruned = pruneOldLogs();
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.use(buildRouter(cfg));
 
 const server = app.listen(cfg.port, cfg.host, () => {
+  if (pruned.length) log.info('pruned old log files', { count: pruned.length });
   log.info('tally-connector started', {
     listening: `http://${cfg.host}:${cfg.port}`,
     tally: `http://${cfg.tallyHost}:${cfg.tallyPort}`,

@@ -1,9 +1,11 @@
 import fs from 'node:fs';
-import { log, redact, setLogSecrets } from './logger';
+import { log, pruneOldLogs, redact, setLogSecrets } from './logger';
 
 jest.mock('node:fs', () => ({
   mkdirSync: jest.fn(),
   appendFileSync: jest.fn(),
+  readdirSync: jest.fn(() => []),
+  unlinkSync: jest.fn(),
 }));
 
 const mkdir = fs.mkdirSync as unknown as jest.Mock;
@@ -120,5 +122,48 @@ describe('log', () => {
     });
     expect(() => log.info('console only')).not.toThrow();
     expect(console.log).toHaveBeenCalled();
+  });
+});
+
+describe('pruneOldLogs', () => {
+  const readdir = fs.readdirSync as unknown as jest.Mock;
+  const unlink = fs.unlinkSync as unknown as jest.Mock;
+  const today = new Date(2026, 7, 19);
+
+  it('deletes files older than the cutoff and keeps the rest', () => {
+    readdir.mockReturnValueOnce([
+      'tally-connector-2026-06-01.log', // 79 days old
+      'tally-connector-2026-08-18.log', // yesterday
+      'tally-connector-2026-08-19.log', // today
+    ]);
+    expect(pruneOldLogs(30, today)).toEqual(['tally-connector-2026-06-01.log']);
+    expect(unlink).toHaveBeenCalledTimes(1);
+  });
+
+  it('never touches a file it did not write', () => {
+    // Someone else's file in logs/ must survive — this deletes things unattended.
+    readdir.mockReturnValueOnce(['notes.txt', 'connector.log', 'tally-connector-backup.log']);
+    expect(pruneOldLogs(30, today)).toEqual([]);
+    expect(unlink).not.toHaveBeenCalled();
+  });
+
+  it('keeps a file dated exactly on the cutoff', () => {
+    readdir.mockReturnValueOnce(['tally-connector-2026-07-20.log']); // 30 days back
+    expect(pruneOldLogs(30, today)).toEqual([]);
+  });
+
+  it('does not throw when the folder is missing', () => {
+    readdir.mockImplementationOnce(() => {
+      throw new Error('ENOENT');
+    });
+    expect(() => pruneOldLogs(30, today)).not.toThrow();
+  });
+
+  it('does not throw when a file cannot be deleted', () => {
+    readdir.mockReturnValueOnce(['tally-connector-2026-01-01.log']);
+    unlink.mockImplementationOnce(() => {
+      throw new Error('EACCES');
+    });
+    expect(() => pruneOldLogs(30, today)).not.toThrow();
   });
 });

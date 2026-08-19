@@ -57,6 +57,31 @@ function write(level: Level, message: string, meta?: Record<string, unknown>): v
   }
 }
 
+/**
+ * Deletes log files older than `days`.
+ *
+ * The connector runs unattended for months on a machine nobody tidies, so without this the logs
+ * folder only ever grows. Called once at startup — a daily timer would be one more thing to keep
+ * alive for no benefit, since a process that never restarts is also not writing new dates.
+ */
+export function pruneOldLogs(days = 30, now: Date = new Date()): string[] {
+  const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
+  const removed: string[] = [];
+  try {
+    for (const name of fs.readdirSync(LOG_DIR)) {
+      const match = /^tally-connector-(\d{4})-(\d{2})-(\d{2})\.log$/.exec(name);
+      if (!match) continue; // never touch a file this logger did not write
+      const fileDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      if (fileDate.getTime() >= cutoff) continue;
+      fs.unlinkSync(path.join(LOG_DIR, name));
+      removed.push(name);
+    }
+  } catch {
+    // No logs folder yet, or no permission — neither is worth failing a startup over.
+  }
+  return removed;
+}
+
 export const log = {
   info: (message: string, meta?: Record<string, unknown>) => write('info', message, meta),
   warn: (message: string, meta?: Record<string, unknown>) => write('warn', message, meta),
