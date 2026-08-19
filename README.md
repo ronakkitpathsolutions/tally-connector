@@ -63,7 +63,6 @@ uninstall.bat
 |---|---|
 | `PORT` | Connector port. `4000`, and the Cloudflare Tunnel origin must match. |
 | `SHARED_SECRET` | Must equal `TALLY_CONNECTOR_SECRET` on the TMS backend, or every request gets a 401. |
-| `TALLY_HOST` | `127.0.0.1` |
 | `TALLY_PORT` | `9000` |
 | `TALLY_TIMEOUT_MS` | How long to wait for Tally before giving up. Default 30000. |
 | `DEFAULT_COMPANY` | Exact Tally company name, used when the backend sends a blank company. |
@@ -141,7 +140,7 @@ registered as a Windows service via NSSM instead, matching how `cloudflared` alr
 
 ```cmd
 npm install
-npm test          :: 70 tests, no Tally or network needed
+npm test          :: 71 tests, no Tally or network needed
 npm run dev
 ```
 

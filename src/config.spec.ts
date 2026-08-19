@@ -3,7 +3,6 @@ import { loadConfig } from './config';
 const base = {
   PORT: '4000',
   SHARED_SECRET: 's3cret',
-  TALLY_HOST: '127.0.0.1',
   TALLY_PORT: '9000',
   DEFAULT_COMPANY: 'PRATHAM TRANSPORT PVT LTD',
 };
@@ -15,6 +14,15 @@ describe('loadConfig', () => {
     expect(c.tallyPort).toBe(9000);
     expect(c.host).toBe('127.0.0.1');
     expect(c.defaultCompany).toBe('PRATHAM TRANSPORT PVT LTD');
+  });
+
+  it('always reaches Tally on loopback, with no env knob to change it', () => {
+    // Tally and the connector are always on the same PC. Keeping this out of .env removes a
+    // setting that could only ever be wrong, and avoids a HOST var that reads like a bind address.
+    expect(loadConfig(base as NodeJS.ProcessEnv).tallyHost).toBe('127.0.0.1');
+    expect(loadConfig({ ...base, TALLY_HOST: '10.0.0.5', HOST: '10.0.0.5' } as NodeJS.ProcessEnv).tallyHost).toBe(
+      '127.0.0.1',
+    );
   });
 
   it('throws when SHARED_SECRET is missing', () => {

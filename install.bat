@@ -87,7 +87,6 @@ REM value ending in a digit silently corrupts the line. Leading redirection is
 REM immune to that.
 >".env"  echo PORT=4000
 >>".env" echo SHARED_SECRET=!SHARED_SECRET!
->>".env" echo TALLY_HOST=127.0.0.1
 >>".env" echo TALLY_PORT=!TALLY_PORT!
 >>".env" echo TALLY_TIMEOUT_MS=30000
 >>".env" echo DEFAULT_COMPANY=!TALLY_COMPANY!

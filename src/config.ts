@@ -22,11 +22,12 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   return {
     port: Number(env.PORT ?? 4000),
-    // Deliberately not configurable. Cloudflared connects from this same machine, so loopback is
-    // sufficient; binding a wider interface would expose the connector to the office LAN.
+    // Neither host is configurable, and both are loopback for the same reason: the connector and
+    // TallyPrime always run on the one office PC. Binding wider would expose the connector to the
+    // office LAN, and a settable Tally host could only ever be set wrong.
     host: '127.0.0.1',
     sharedSecret: required(env, 'SHARED_SECRET'),
-    tallyHost: env.TALLY_HOST ?? '127.0.0.1',
+    tallyHost: '127.0.0.1',
     tallyPort: Number(env.TALLY_PORT ?? 9000),
     tallyTimeoutMs: Number(env.TALLY_TIMEOUT_MS ?? 30000),
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
