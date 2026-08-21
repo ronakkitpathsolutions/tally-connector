@@ -80,7 +80,11 @@ export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResul
       finish({
         ok: false,
         errorCode: 'TALLY_TIMEOUT',
-        error: `Tally did not respond within ${cfg.tallyTimeoutMs}ms. It may be waiting on a dialog box.`,
+        // Says to check rather than to retry. Tally accepted the request and went quiet, so it may
+        // have written the voucher before falling silent, and REMOTEID does not deduplicate.
+        error:
+          `Tally did not respond within ${cfg.tallyTimeoutMs}ms — it may be waiting on a dialog box. ` +
+          'The voucher may still have been written, so check Tally before sending it again.',
         rawXml: null,
       });
       // destroy() fires an 'error' afterwards; the settled guard above keeps it from overwriting this.
