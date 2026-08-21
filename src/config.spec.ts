@@ -84,6 +84,13 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, TALLY_EDU_MODE: '1' } as NodeJS.ProcessEnv).eduMode).toBe(true);
   });
 
+  it('leaves the duplicate check off unless asked', () => {
+    // It is off by default because it broke every push against this client's Tally — the voucher
+    // collection never returned and the 30s timeout killed each one before it could import.
+    expect(loadConfig(base as NodeJS.ProcessEnv).duplicateCheck).toBe(false);
+    expect(loadConfig({ ...base, TALLY_DUPLICATE_CHECK: 'true' } as NodeJS.ProcessEnv).duplicateCheck).toBe(true);
+  });
+
   it('accepts the casings someone actually types in a .env', () => {
     // Exact-'true' matching meant TRUE and True read as off while looking set in the file.
     for (const v of ['TRUE', 'True', 'yes', 'YES', 'on', ' true ']) {

@@ -161,7 +161,21 @@ would mark every failed invoice as synced.
 | `TALLY_LINEERROR` | Tally rejected it. The message is Tally's own text, usually a ledger name mismatch. |
 | `TALLY_NO_CHANGE` | Tally accepted the request but created and altered nothing. |
 
-## Repeat pushes are safe — but not because of REMOTEID
+## Duplicate protection, and where it actually lives
+
+**The Tally-side duplicate check is off by default.** It asks Tally for the vouchers dated on the
+bill's day, and against this client's Tally that collection never returns: every push died on it at
+the 30s timeout and nothing was imported. Measured, not assumed — the log showed
+`took: 30004ms` on the duplicate check for every push, with an empty queue.
+
+So duplicates are guarded on the **backend**, which skips invoices already marked synced. The gap
+that leaves: an import that succeeds while its reply is lost is recorded as Failed, so retrying it
+could write the voucher twice. Look in Tally before re-pushing a bill that timed out.
+
+`TALLY_DUPLICATE_CHECK=true` turns the Tally-side check back on, if a Tally is found where that
+collection responds.
+
+## REMOTEID does not deduplicate
 
 **`REMOTEID` does not deduplicate.** Verified against the client's Tally: importing the same
 voucher twice produced two vouchers, not an alter. The retry design originally assumed otherwise,

@@ -16,6 +16,7 @@ function cfgFor(port: number): AppConfig {
     defaultCompany: 'C',
     eduMode: false,
     allowMasterCreate: false,
+    duplicateCheck: false,
   };
 }
 

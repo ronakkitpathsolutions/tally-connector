@@ -126,8 +126,13 @@ export function buildRouter(cfg: AppConfig): Router {
     // client's Tally — so without this a retry or a timeout writes double sales into their books.
     const company = body.company || cfg.defaultCompany;
     const date = resolveDate(body.date, body.billNo);
-    const lookup = await postRawToTally(cfg, buildVoucherLookupXml(company, date));
-    if (lookup.ok && voucherNumberPresent(lookup.body, body.billNo)) {
+    // Skipped unless TALLY_DUPLICATE_CHECK is on: against this client's Tally the voucher
+    // collection never returns, and every push died here at the 30s timeout without importing.
+    const lookup = cfg.duplicateCheck
+      ? await postRawToTally(cfg, buildVoucherLookupXml(company, date))
+      : { ok: true as const, body: '' };
+
+    if (cfg.duplicateCheck && lookup.ok && voucherNumberPresent(lookup.body, body.billNo)) {
       log.info('already in Tally, skipped', { billNo: body.billNo, took: took() });
       res.json({
         ok: true,
@@ -138,7 +143,7 @@ export function buildRouter(cfg: AppConfig): Router {
       return;
     }
     // A failed lookup is not treated as "absent": importing on a guess is how duplicates happen.
-    if (!lookup.ok) {
+    if (cfg.duplicateCheck && !lookup.ok) {
       log.error('duplicate check failed, not imported', { billNo: body.billNo, reason: lookup.error, took: took() });
       res.json({
         ok: false,

@@ -15,6 +15,7 @@ const cfg: AppConfig = {
   defaultCompany: 'PRATHAM TRANSPORT PVT LTD',
   eduMode: false,
   allowMasterCreate: false,
+  duplicateCheck: false,
 };
 
 const app = express().use(express.json()).use(buildRouter(cfg));

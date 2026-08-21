@@ -15,6 +15,7 @@ function cfgFor(port: number, timeoutMs = 5000): AppConfig {
     defaultCompany: 'C',
     eduMode: false,
     allowMasterCreate: false,
+    duplicateCheck: false,
   };
 }
 

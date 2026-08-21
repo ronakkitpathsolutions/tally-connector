@@ -17,6 +17,19 @@ export interface AppConfig {
    */
   mastersPort: number;
   /**
+   * Ask Tally whether the bill is already there before importing.
+   *
+   * Off by default because it does not work against this client's Tally: the voucher collection it
+   * needs never returns, so every push died on it at the 30s timeout and nothing was ever imported.
+   * Measured, not guessed — the connector log shows `took: 30004ms` on the duplicate check for
+   * every push, with an empty queue.
+   *
+   * Duplicates are guarded on the backend instead, which skips invoices already marked synced. The
+   * gap that leaves: an import that succeeds while its reply is lost is recorded as Failed, so
+   * retrying it could write the voucher twice. Check Tally before re-pushing a timed-out bill.
+   */
+  duplicateCheck: boolean;
+  /**
    * Create missing ledgers alongside the voucher. Off by default: against a real company a mapping
    * typo would silently become a new ledger instead of a loud failure.
    */
@@ -70,5 +83,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     defaultCompany: required(env, 'DEFAULT_COMPANY'),
     eduMode: flag(env.TALLY_EDU_MODE),
     allowMasterCreate: flag(env.ALLOW_MASTER_CREATE),
+    duplicateCheck: flag(env.TALLY_DUPLICATE_CHECK),
   };
 }
