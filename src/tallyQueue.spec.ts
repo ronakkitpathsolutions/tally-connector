@@ -1,4 +1,4 @@
-import { runExclusive, queueDepth, resetQueue } from './tallyQueue';
+import { runExclusive, queueDepth, resetQueue, MAX_QUEUE_DEPTH, TallyBusyError } from './tallyQueue';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,5 +56,32 @@ describe('runExclusive', () => {
     expect(queueDepth()).toBe(2);
     await Promise.all(running);
     expect(queueDepth()).toBe(0);
+  });
+
+  it('refuses new work once the backlog is too deep', async () => {
+    // Better to say "busy" at once than let a caller wait out its own timeout and then report a
+    // failure for an invoice Tally never even saw.
+    const held = Array.from({ length: MAX_QUEUE_DEPTH }, () => runExclusive(() => wait(50)));
+    await expect(runExclusive(async () => 'nope')).rejects.toBeInstanceOf(TallyBusyError);
+    await Promise.all(held);
+  });
+
+  it('accepts work again once the backlog clears', async () => {
+    const held = Array.from({ length: MAX_QUEUE_DEPTH }, () => runExclusive(() => wait(10)));
+    await Promise.all(held);
+    await expect(runExclusive(async () => 'fine')).resolves.toBe('fine');
+  });
+
+  it('rejecting a full queue does not disturb the work already in it', async () => {
+    const done: number[] = [];
+    const held = Array.from({ length: MAX_QUEUE_DEPTH }, (_, i) =>
+      runExclusive(async () => {
+        await wait(5);
+        done.push(i);
+      }),
+    );
+    await expect(runExclusive(async () => 'nope')).rejects.toBeInstanceOf(TallyBusyError);
+    await Promise.all(held);
+    expect(done).toHaveLength(MAX_QUEUE_DEPTH);
   });
 });

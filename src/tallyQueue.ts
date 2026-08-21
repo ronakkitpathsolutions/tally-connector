@@ -15,12 +15,30 @@
 let chain: Promise<unknown> = Promise.resolve();
 let depth = 0;
 
+/**
+ * Refuse new work past this depth.
+ *
+ * Tally answers one request at a time, so a backlog only grows. Without a ceiling the caller waits
+ * behind everything ahead of it until its own HTTP timeout fires, and reports a failure for an
+ * invoice that was never even attempted. Saying "busy" immediately is a far better answer: it is
+ * true, it is instant, and the job stays Pending for the sweep to pick up.
+ */
+export const MAX_QUEUE_DEPTH = 25;
+
+export class TallyBusyError extends Error {
+  readonly busy = true;
+  constructor(current: number) {
+    super(`Tally has ${current} requests queued already and cannot take more right now.`);
+  }
+}
+
 /** Number of calls waiting or running. Exposed for /health so contention is visible. */
 export function queueDepth(): number {
   return depth;
 }
 
 export function runExclusive<T>(task: () => Promise<T>): Promise<T> {
+  if (depth >= MAX_QUEUE_DEPTH) return Promise.reject(new TallyBusyError(depth));
   depth += 1;
 
   // Chained off the settled state, not the value: one failed call must not stop the queue, and a

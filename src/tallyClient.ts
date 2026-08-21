@@ -3,14 +3,15 @@ import iconv from 'iconv-lite';
 import { AppConfig } from './config';
 import { ConnectorResult } from './types';
 import { parseTallyResponse } from './xml/parseTallyResponse';
-import { runExclusive } from './tallyQueue';
+import { runExclusive, TallyBusyError } from './tallyQueue';
 
 /** Tally's XML interface speaks windows-1252. Sending UTF-8 mangles any non-ASCII character. */
 const TALLY_ENCODING = 'win1252';
 
 /** Raw round-trip, for read-only queries whose reply is not an import result. */
 export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
-  return runExclusive(() => new Promise((resolve) => {
+  // A rejected queue is an answer, not a crash: turn it into the same shape every caller handles.
+  return runExclusive(() => new Promise<{ ok: true; body: string } | { ok: false; error: string }>((resolve) => {
     let settled = false;
     const done = (r: { ok: true; body: string } | { ok: false; error: string }) => {
       if (settled) return;
@@ -40,7 +41,9 @@ export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true;
     req.on('error', (err) => done({ ok: false, error: err.message }));
     req.write(body);
     req.end();
-  }));
+  })).catch((err) =>
+    err instanceof TallyBusyError ? { ok: false as const, error: err.message } : Promise.reject(err),
+  );
 }
 
 export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResult> {
@@ -97,5 +100,16 @@ export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResul
 
     req.write(body);
     req.end();
-  }));
+  })).catch((err) => {
+    if (err instanceof TallyBusyError) {
+      // Reported as unreachable on purpose: nothing was sent, so the backend may safely try later.
+      return {
+        ok: false as const,
+        errorCode: 'TALLY_UNREACHABLE' as const,
+        error: err.message,
+        rawXml: null,
+      };
+    }
+    throw err;
+  });
 }
