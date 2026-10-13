@@ -68,6 +68,41 @@ describe('postToTally', () => {
     server.close();
   });
 
+  it('opens a fresh connection per request rather than reusing a kept-alive one', async () => {
+    const headers: string[] = [];
+    const { server, port } = await listen((req, res) => {
+      headers.push(String(req.headers.connection ?? ''));
+      req.on('data', () => {});
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(okXml);
+      });
+    });
+
+    await postToTally(cfgFor(port), '<ENVELOPE/>');
+    await postToTally(cfgFor(port), '<ENVELOPE/>');
+
+    expect(headers).toEqual(['close', 'close']);
+    server.close();
+  });
+
+  it('reports a reply cut off mid-stream instead of crashing', async () => {
+    const { server, port } = await listen((req, res) => {
+      req.on('data', () => {});
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'text/xml', 'Content-Length': '1000' });
+        res.write('<RESPONSE>');
+        setTimeout(() => res.socket?.destroy(), 20);
+      });
+    });
+
+    const result = await postToTally(cfgFor(port), '<ENVELOPE/>');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/check Tally/);
+    server.close();
+  });
+
   it('reports TALLY_UNREACHABLE when nothing is listening', async () => {
     // Port 1 is reserved and never has a listener.
     const result = await postToTally(cfgFor(1), '<ENVELOPE/>');

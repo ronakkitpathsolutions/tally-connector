@@ -135,6 +135,34 @@ describe('buildInvoiceXml', () => {
     expect(xml).toContain('<AMOUNT>0.24</AMOUNT>');
   });
 
+  it('debits a negative round-off with ISDEEMEDPOSITIVE Yes', () => {
+    // The bill rounded down: Tally refuses "-0.24" flagged as a credit.
+    const xml = buildInvoiceXml({
+      ...igstInvoice,
+      roundOff: -0.24,
+      total: 98175.76,
+      roundOffLedgerName: 'ROUND OFF A/C',
+    });
+    expect(xml).toContain(
+      '<LEDGERNAME>ROUND OFF A/C</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>-0.24</AMOUNT>',
+    );
+  });
+
+  it('rejects amounts that only balance before rounding to paise', () => {
+    // 10.004 + 10.004 = 20.008 within tolerance, but Tally would get 10.00 + 10.00 against 20.01.
+    expect(() =>
+      buildInvoiceXml({
+        ...cgstInvoice,
+        lines: [
+          { ledgerName: 'SALES GST', amount: 10.004 },
+          { ledgerName: 'SALES GST', amount: 10.004 },
+        ],
+        taxes: [],
+        total: 20.008,
+      }),
+    ).toThrow(/does not add up/);
+  });
+
   it('rejects a non-zero round-off with no ledger to post it to', () => {
     expect(() => buildInvoiceXml({ ...igstInvoice, roundOff: 0.24, total: 98176.24 })).toThrow(/round.?off/i);
   });

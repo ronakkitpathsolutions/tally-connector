@@ -1,12 +1,5 @@
 import { VoucherPayload, LedgerEntry } from '../types';
-import { escapeXml, formatAmount } from './escape';
-
-/**
- * Half a paisa. Rounded GST halves routinely leave sub-paisa dust, so a stricter check would reject
- * valid vouchers; a looser one would let a real imbalance through and Tally would reject it with a
- * far less helpful message.
- */
-const BALANCE_TOLERANCE = 0.005;
+import { escapeXml, formatAmount, toPaise } from './escape';
 
 // "Invoice Voucher View" is the inventory/stock-item view and TallyPrime throws it out as an
 // exception for a services bill — verified against the client's Tally, where it silently
@@ -20,7 +13,7 @@ const ZERO_THRESHOLD = 0.005;
 function ledgerEntryXml(entry: LedgerEntry): string {
   // Tally's convention, not arithmetic intuition: a debited ledger carries a negative AMOUNT and
   // ISDEEMEDPOSITIVE Yes. On a Sales voucher that is the party; sales and tax ledgers are credited.
-  const deemedPositive = entry.amount < 0 ? 'Yes' : 'No';
+  const deemedPositive = toPaise(entry.amount) < 0 ? 'Yes' : 'No';
   return (
     '<ALLLEDGERENTRIES.LIST>' +
     `<LEDGERNAME>${escapeXml(entry.ledgerName)}</LEDGERNAME>` +
@@ -33,9 +26,11 @@ function ledgerEntryXml(entry: LedgerEntry): string {
 export function buildVoucherXml(payload: VoucherPayload): string {
   const entries = payload.entries.filter((e) => Math.abs(e.amount) >= ZERO_THRESHOLD);
 
-  const sum = entries.reduce((acc, e) => acc + e.amount, 0);
-  if (Math.abs(sum) > BALANCE_TOLERANCE) {
-    throw new Error(`Voucher does not balance: entries sum to ${formatAmount(sum)}, expected 0.00`);
+  // Balanced in paise, as the entries will actually be written. Raw floats within half a paisa of
+  // zero could still round per entry into a voucher that is a paisa out, which Tally refuses.
+  const sum = entries.reduce((acc, e) => acc + toPaise(e.amount), 0);
+  if (sum !== 0) {
+    throw new Error(`Voucher does not balance: entries sum to ${formatAmount(sum / 100)}, expected 0.00`);
   }
 
   const party = escapeXml(payload.party.ledgerName);
