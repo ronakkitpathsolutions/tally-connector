@@ -1,5 +1,5 @@
 import { InvoiceLine, InvoicePayload, TaxLine } from '../types';
-import { escapeXml, formatAmount } from './escape';
+import { escapeXml, formatAmount, toPaise } from './escape';
 import { buildMastersXml } from './buildMastersXml';
 
 /** Half a paisa — rounded GST halves routinely leave sub-paisa dust. */
@@ -21,14 +21,18 @@ function tag(name: string, value: string | undefined): string {
 }
 
 /**
- * A credited ledger line: sales or tax. Tally's convention is that credited entries carry a
- * positive AMOUNT with ISDEEMEDPOSITIVE No; the party, debited, is the mirror of this.
+ * A credited ledger line: sales, tax or round-off. Tally's convention is that credited entries carry
+ * a positive AMOUNT with ISDEEMEDPOSITIVE No; the party, debited, is the mirror of this.
+ *
+ * The flag follows the sign rather than being fixed at No, because a negative round-off (the bill
+ * rounded *down*) is a debit. Sent as "No" with "-0.40", Tally rejects the voucher — which only
+ * happens on bills that round down, so it looked like an intermittent failure.
  */
 function creditLine(ledgerName: string, amount: number, extras = ''): string {
   return (
     '<ALLLEDGERENTRIES.LIST>' +
     `<LEDGERNAME>${escapeXml(ledgerName)}</LEDGERNAME>` +
-    '<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>' +
+    `<ISDEEMEDPOSITIVE>${toPaise(amount) < 0 ? 'Yes' : 'No'}</ISDEEMEDPOSITIVE>` +
     `<AMOUNT>${formatAmount(amount)}</AMOUNT>` +
     extras +
     '</ALLLEDGERENTRIES.LIST>'
@@ -78,11 +82,17 @@ export function buildInvoiceXml(payload: InvoicePayload, options: { createMaster
 
   // Stricter than the plain voucher's "entries sum to zero": here a grand total that disagrees with
   // its own line items is caught before anything is sent, rather than posting a wrong figure.
-  const computed = [...lines, ...taxes].reduce((sum, e) => sum + e.amount, 0) + roundOff;
-  if (Math.abs(computed - payload.total) > TOLERANCE) {
+  //
+  // Added up in paise, after rounding each entry exactly as it will be written. Comparing the raw
+  // floats let through amounts with a third decimal: 10.004 + 10.004 = 20.008 passes, but Tally
+  // receives 10.00 + 10.00 against a total of 20.01 and refuses it as unbalanced — only on the
+  // bills whose GST happened to land on a third decimal.
+  const computedPaise =
+    [...lines, ...taxes].reduce((sum, e) => sum + toPaise(e.amount), 0) + toPaise(roundOff);
+  if (computedPaise !== toPaise(payload.total)) {
     throw new Error(
-      `Invoice does not add up: lines + taxes + roundOff = ${formatAmount(computed)}, ` +
-        `but total is ${formatAmount(payload.total)}`,
+      `Invoice does not add up: lines + taxes + roundOff = ${formatAmount(computedPaise / 100)}, ` +
+        `but total is ${formatAmount(payload.total)}. Round every amount to 2 decimals before sending.`,
     );
   }
 

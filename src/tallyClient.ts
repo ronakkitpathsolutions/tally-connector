@@ -8,6 +8,19 @@ import { runExclusive, TallyBusyError } from './tallyQueue';
 /** Tally's XML interface speaks windows-1252. Sending UTF-8 mangles any non-ASCII character. */
 const TALLY_ENCODING = 'win1252';
 
+/**
+ * One fresh connection per request, closed afterwards (paired with `agent: false` on each call).
+ *
+ * Node 19+ keeps HTTP connections alive by default. Tally's listener closes an idle socket on its
+ * own schedule without telling the client, so the next push could be written into a dead socket
+ * and fail with ECONNRESET / "socket hang up" — only when pushes were a few seconds apart, which
+ * is why it failed "sometimes". Connecting fresh costs well under a millisecond on localhost.
+ */
+const TALLY_HEADERS = {
+  'Content-Type': 'text/xml;charset=windows-1252',
+  Connection: 'close',
+} as const;
+
 /** Raw round-trip, for read-only queries whose reply is not an import result. */
 export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   // A rejected queue is an answer, not a crash: turn it into the same shape every caller handles.
@@ -26,12 +39,14 @@ export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true;
         method: 'POST',
         path: '/',
         timeout: cfg.tallyTimeoutMs,
-        headers: { 'Content-Type': 'text/xml;charset=windows-1252', 'Content-Length': body.length },
+        agent: false,
+        headers: { ...TALLY_HEADERS, 'Content-Length': body.length },
       },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
         res.on('end', () => done({ ok: true, body: iconv.decode(Buffer.concat(chunks), TALLY_ENCODING) }));
+        res.on('error', (err) => done({ ok: false, error: `Tally closed the connection mid-reply — ${err.message}` }));
       },
     );
     req.on('timeout', () => {
@@ -64,15 +79,26 @@ export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResul
         method: 'POST',
         path: '/',
         timeout: cfg.tallyTimeoutMs,
-        headers: {
-          'Content-Type': 'text/xml;charset=windows-1252',
-          'Content-Length': body.length,
-        },
+        agent: false,
+        headers: { ...TALLY_HEADERS, 'Content-Length': body.length },
       },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
         res.on('end', () => finish(parseTallyResponse(iconv.decode(Buffer.concat(chunks), TALLY_ENCODING))));
+        // The request reached Tally and a reply had started, so — like a timeout — the voucher may
+        // already be written. Without this listener the stream error had no handler and crashed
+        // the whole connector.
+        res.on('error', (err) =>
+          finish({
+            ok: false,
+            errorCode: 'TALLY_TIMEOUT',
+            error:
+              `Tally closed the connection mid-reply — ${err.message}. ` +
+              'The voucher may still have been written, so check Tally before sending it again.',
+            rawXml: null,
+          }),
+        );
       },
     );
 

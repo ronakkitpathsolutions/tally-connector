@@ -1,4 +1,4 @@
-import { escapeXml, formatAmount } from './escape';
+import { escapeXml, formatAmount, toPaise } from './escape';
 
 describe('escapeXml', () => {
   it('escapes the five XML entities', () => {
@@ -16,6 +16,11 @@ describe('escapeXml', () => {
     expect(escapeXml('a & <b>')).toBe('a &amp; &lt;b&gt;');
     expect(escapeXml('&amp;')).toBe('&amp;amp;');
   });
+
+  it('drops control characters XML cannot carry, keeping tabs and newlines', () => {
+    expect(escapeXml('Freight\u000Bcharges\u000C')).toBe('Freightcharges');
+    expect(escapeXml('line 1\nline 2\tend')).toBe('line 1\nline 2\tend');
+  });
 });
 
 describe('formatAmount', () => {
@@ -28,5 +33,12 @@ describe('formatAmount', () => {
   it('uses no thousands separators and no exponent notation', () => {
     expect(formatAmount(1234567.891)).toBe('1234567.89');
     expect(formatAmount(0.0000001)).toBe('0.00');
+  });
+
+  it('rounds half away from zero, despite binary floating point', () => {
+    expect(formatAmount(1.005)).toBe('1.01');
+    expect(formatAmount(-1.005)).toBe('-1.01');
+    expect(formatAmount(-0.004)).toBe('0.00');
+    expect(toPaise(1.005)).toBe(101);
   });
 });
