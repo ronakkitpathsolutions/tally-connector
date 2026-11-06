@@ -168,3 +168,28 @@ describe('routes', () => {
     expect(res.body.errorCode).toBe('TALLY_UNREACHABLE');
   });
 });
+
+describe('GET /logs (public)', () => {
+  it('is open without the secret, like /health', async () => {
+    const res = await request(app).get('/logs').query({ date: '1999-01-01' });
+    expect(res.status).not.toBe(401);
+  });
+
+  it('answers 400 for a date that is not YYYY-MM-DD', async () => {
+    const res = await request(app).get('/logs').query({ date: '../.env' });
+    expect(res.status).toBe(400);
+    expect(res.body.errorCode).toBe('BAD_QUERY');
+  });
+
+  it('answers 404 with the days that exist when that day has no log', async () => {
+    const res = await request(app).get('/logs').query({ date: '1999-01-01' });
+    expect(res.status).toBe(404);
+    expect(res.body.errorCode).toBe('NOT_FOUND');
+    expect(Array.isArray(res.body.available)).toBe(true);
+  });
+
+  it('tells Cloudflare and browsers not to cache it', async () => {
+    const res = await request(app).get('/logs').query({ date: '1999-01-01' });
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+});

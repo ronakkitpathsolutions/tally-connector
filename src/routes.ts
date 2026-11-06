@@ -13,7 +13,8 @@ import { buildLedgerLookupXml, ledgerNamesIn, ledgersRequiredBy, ledgersWithGrou
 import { matchToPayloadLedger, parseMissingLedger } from './xml/parseMissingLedger';
 import { probeTally } from './tallyHealth';
 import { queueDepth } from './tallyQueue';
-import { log } from './logger';
+import { log, LOG_DIR } from './logger';
+import { readLog } from './logReader';
 import { InvoicePayload, VoucherPayload } from './types';
 
 export function buildRouter(cfg: AppConfig): Router {
@@ -215,6 +216,25 @@ export function buildRouter(cfg: AppConfig): Router {
     const ledgers = ledgersWithGroups(reply.body);
     log.info('ledger list served', { company, port: cfg.mastersPort, count: ledgers.length });
     res.json({ ok: true, company, count: ledgers.length, ledgers });
+  });
+
+  /**
+   * What Tally did with each push on one day — successes, warnings and errors only — as JSON:
+   * `?date=YYYY-MM-DD&outcome=error|warning&grep=T/4806&tail=2000` (all optional).
+   *
+   * PUBLIC by the owner's decision (2026-11-06) — no secret, so it opens in a browser. Anyone with
+   * the URL can read bill numbers, ledger names and Tally's replies; the secret itself is redacted.
+   * Put Cloudflare Access in front of this path before the live books are connected.
+   * Read-only and never touches Tally, so it is safe to call while a batch is running.
+   */
+  router.get('/logs', (req, res) => {
+    const result = readLog(
+      { date: req.query.date, grep: req.query.grep, tail: req.query.tail, outcome: req.query.outcome },
+      { dir: LOG_DIR, now: new Date() },
+    );
+    const status = result.ok ? 200 : result.errorCode === 'NOT_FOUND' ? 404 : 400;
+    // Never cached at Cloudflare's edge or in a browser: logs change by the second.
+    res.set('Cache-Control', 'no-store').status(status).json(result);
   });
 
   router.post('/admin/update', secured, (_req, res) => {

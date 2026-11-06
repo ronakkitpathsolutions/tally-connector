@@ -6,9 +6,9 @@ fully-resolved JSON invoice over a Cloudflare Tunnel, renders Tally's import XML
 
 ```
 TMS Backend (AWS)
-      |  HTTPS + Cloudflare Access service token
+      |  HTTPS + x-connector-secret (+ Cloudflare Access service token, once Access is enabled)
       v
-tally.tally-connector.store
+tally-connector.store
       |  Cloudflare Named Tunnel
       v
   Client Windows PC
@@ -106,6 +106,7 @@ All except `/health` require the `x-connector-secret` header.
 | `POST /tally/invoice/preview` | Renders the same XML and returns it **without sending it to Tally**. |
 | `POST /tally/voucher` | Leaner plain accounting voucher — kept alongside the invoice route while we confirm which shape this Tally release accepts. |
 | `POST /tally/preview` | Preview for `/tally/voucher`. |
+| `GET /logs` | **Public, no secret.** What Tally did with each push on one day — success / warning / error entries only, as JSON with per-day `counts`. `?date=YYYY-MM-DD` (default today, server time) `&outcome=error\|warning` `&grep=T/4806` (plain text, case-insensitive, `\|` = any of) `&tail=2000` (default and max). Read-only, never touches Tally, `Cache-Control: no-store`, lines redacted again. 404 lists the days that exist. Anyone with the URL can read it — put Cloudflare Access on `/logs` before the live books are connected. |
 | `POST /admin/update` | `git pull && npm ci && npm run build`, then exits so the service restarts into the new build. |
 
 ### Start with `/tally/invoice/preview`
@@ -207,7 +208,7 @@ registered as a Windows service via NSSM instead, matching how `cloudflared` alr
 
 ```cmd
 npm install
-npm test          :: 71 tests, no Tally or network needed
+npm test          :: 180 tests, no Tally or network needed
 npm run dev
 ```
 

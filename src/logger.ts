@@ -12,7 +12,7 @@ import path from 'node:path';
  * Nothing here ever writes the shared secret — see `redact`.
  */
 
-const LOG_DIR = path.join(process.cwd(), 'logs');
+export const LOG_DIR = path.join(process.cwd(), 'logs');
 
 type Level = 'info' | 'warn' | 'error';
 
@@ -33,11 +33,16 @@ export function redact(text: string): string {
   return secrets.reduce((out, secret) => out.split(secret).join('***'), text);
 }
 
-function fileFor(now: Date): string {
-  // Local date, not UTC: whoever opens this is looking for "today" in their own timezone.
+/** `YYYY-MM-DD` in local time, not UTC: whoever opens a log is looking for "today" in their own timezone. */
+export function dayStamp(now: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return path.join(LOG_DIR, `tally-connector-${stamp}.log`);
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+export const logFileName = (stamp: string): string => `tally-connector-${stamp}.log`;
+
+function fileFor(now: Date): string {
+  return path.join(LOG_DIR, logFileName(dayStamp(now)));
 }
 
 function write(level: Level, message: string, meta?: Record<string, unknown>): void {
