@@ -8,6 +8,17 @@ import { runExclusive, TallyBusyError } from './tallyQueue';
 /** Tally's XML interface speaks windows-1252. Sending UTF-8 mangles any non-ASCII character. */
 const TALLY_ENCODING = 'win1252';
 
+/**
+ * Socket errors that can only happen before a connection exists — so Tally cannot have seen the
+ * voucher, and the backend may keep it queued until Tally is back. Anything else (ECONNRESET,
+ * EPIPE, "socket hang up") happens on a connection Tally accepted, after the XML may have reached
+ * it: the voucher may be written, and REMOTEID does not deduplicate.
+ */
+const NOTHING_SENT = new Set(['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'EADDRNOTAVAIL', 'ENOTFOUND', 'EAI_AGAIN']);
+
+/** Whether a socket error proves the request never reached Tally. */
+export const neverReachedTally = (err: NodeJS.ErrnoException): boolean => NOTHING_SENT.has(String(err.code));
+
 /** Raw round-trip, for read-only queries whose reply is not an import result. */
 export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   // A rejected queue is an answer, not a crash: turn it into the same shape every caller handles.
@@ -26,6 +37,10 @@ export function postRawToTally(cfg: AppConfig, xml: string): Promise<{ ok: true;
         method: 'POST',
         path: '/',
         timeout: cfg.tallyTimeoutMs,
+        // A fresh socket per request. Node's default agent keeps sockets alive, and writing to one
+        // Tally has already closed fails with ECONNRESET — an error that cannot be told apart from
+        // Tally dropping a request it received.
+        agent: false,
         headers: { 'Content-Type': 'text/xml;charset=windows-1252', 'Content-Length': body.length },
       },
       (res) => {
@@ -64,6 +79,9 @@ export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResul
         method: 'POST',
         path: '/',
         timeout: cfg.tallyTimeoutMs,
+        // Fresh socket per import — see postRawToTally. A reused socket's ECONNRESET would be
+        // reported below as "may have been written" for a voucher Tally never saw.
+        agent: false,
         headers: {
           'Content-Type': 'text/xml;charset=windows-1252',
           'Content-Length': body.length,
@@ -91,13 +109,27 @@ export function postToTally(cfg: AppConfig, xml: string): Promise<ConnectorResul
       req.destroy();
     });
 
-    req.on('error', (err) => {
+    req.on('error', (err: NodeJS.ErrnoException) => {
+      if (neverReachedTally(err)) {
+        // Nothing was sent — the backend keeps the bill queued until Tally is back.
+        finish({
+          ok: false,
+          errorCode: 'TALLY_UNREACHABLE',
+          error:
+            `Cannot reach Tally at ${cfg.tallyHost}:${cfg.tallyPort} — ${err.message}. ` +
+            'Is TallyPrime open with a company loaded?',
+          rawXml: null,
+        });
+        return;
+      }
+      // Tally accepted the connection and then dropped it. Same rule as a timeout: the voucher may
+      // be in Tally, so this is reported for checking, never retried automatically.
       finish({
         ok: false,
-        errorCode: 'TALLY_UNREACHABLE',
+        errorCode: 'TALLY_CONNECTION_LOST',
         error:
-          `Cannot reach Tally at ${cfg.tallyHost}:${cfg.tallyPort} — ${err.message}. ` +
-          'Is TallyPrime open with a company loaded?',
+          `Tally closed the connection mid-request (${err.message}). ` +
+          'The voucher may still have been written, so check Tally before sending it again.',
         rawXml: null,
       });
     });

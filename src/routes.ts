@@ -15,7 +15,25 @@ import { probeTally } from './tallyHealth';
 import { queueDepth } from './tallyQueue';
 import { log, LOG_DIR } from './logger';
 import { readLog } from './logReader';
-import { InvoicePayload, VoucherPayload } from './types';
+import { ConnectorErrorCode, InvoicePayload, VoucherPayload } from './types';
+
+/**
+ * The log line for a push that did not land. Only a refusal by Tally itself is "rejected": calling
+ * a closed Tally a rejection sent people looking for something wrong with a bill Tally never saw.
+ * Every name here must also be listed in logReader's TALLY_EVENTS, or /logs drops the line.
+ */
+export const failureEvent = (code: ConnectorErrorCode): string => {
+  switch (code) {
+    case 'TALLY_UNREACHABLE':
+      return 'Tally not reachable, nothing sent';
+    case 'TALLY_CONNECTION_LOST':
+      return 'Tally dropped the connection';
+    case 'TALLY_TIMEOUT':
+      return 'Tally did not answer in time';
+    default:
+      return 'Tally rejected the voucher';
+  }
+};
 
 export function buildRouter(cfg: AppConfig): Router {
   const router = Router();
@@ -187,7 +205,7 @@ export function buildRouter(cfg: AppConfig): Router {
       log.info('imported', { billNo: body.billNo, action: result.action, voucherId: result.voucherId, took: took() });
     } else {
       // Tally's own words, kept verbatim — a paraphrase here is a paraphrase in every bug report.
-      log.error('Tally rejected the voucher', {
+      log.error(failureEvent(result.errorCode), {
         billNo: body.billNo,
         errorCode: result.errorCode,
         reason: result.error,

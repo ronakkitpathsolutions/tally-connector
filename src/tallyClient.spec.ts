@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
-import { postToTally } from './tallyClient';
+import { neverReachedTally, postToTally } from './tallyClient';
 import { AppConfig } from './config';
 
 function cfgFor(port: number, timeoutMs = 5000): AppConfig {
@@ -78,6 +78,44 @@ describe('postToTally', () => {
     }
   });
 
+  it('reports TALLY_CONNECTION_LOST, not UNREACHABLE, when Tally drops a request it accepted', async () => {
+    // The XML may have reached Tally before the drop, so the backend must not retry this on its
+    // own — unlike a refused connection, where nothing was sent.
+    const { server, port } = await listen((req) => {
+      req.on('data', () => {});
+      req.on('end', () => req.socket.destroy());
+    });
+
+    const result = await postToTally(cfgFor(port), '<ENVELOPE/>');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errorCode).toBe('TALLY_CONNECTION_LOST');
+      expect(result.error).toMatch(/check Tally/i);
+    }
+    server.close();
+  });
+
+  it('opens a fresh socket for every request', async () => {
+    // A kept-alive socket Tally has closed fails with ECONNRESET, which would now read as
+    // "may have been written" for a voucher Tally never saw.
+    const sockets = new Set<unknown>();
+    const { server, port } = await listen((req, res) => {
+      sockets.add(req.socket);
+      req.on('data', () => {});
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(okXml);
+      });
+    });
+
+    await postToTally(cfgFor(port), '<ENVELOPE/>');
+    await postToTally(cfgFor(port), '<ENVELOPE/>');
+
+    expect(sockets.size).toBe(2);
+    server.close();
+  });
+
   it('reports TALLY_TIMEOUT when Tally accepts but never answers', async () => {
     // Tally sitting at a modal prompt behaves exactly like this: connection accepted, then silence.
     const { server, port } = await listen(() => {
@@ -89,5 +127,23 @@ describe('postToTally', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errorCode).toBe('TALLY_TIMEOUT');
     server.close();
+  });
+});
+
+describe('neverReachedTally', () => {
+  const err = (code: string) => Object.assign(new Error(code), { code });
+
+  it.each(['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'EADDRNOTAVAIL', 'ENOTFOUND', 'EAI_AGAIN'])(
+    'treats %s as nothing sent',
+    (code) => expect(neverReachedTally(err(code))).toBe(true),
+  );
+
+  it.each(['ECONNRESET', 'EPIPE', 'ECONNABORTED', 'ETIMEDOUT', 'UNKNOWN'])(
+    'treats %s as possibly received',
+    (code) => expect(neverReachedTally(err(code))).toBe(false),
+  );
+
+  it('treats an error with no code as possibly received', () => {
+    expect(neverReachedTally(new Error('socket hang up'))).toBe(false);
   });
 });

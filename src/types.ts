@@ -87,6 +87,7 @@ export type ConnectorErrorCode =
   | 'AUTH'
   | 'BAD_PAYLOAD'
   | 'TALLY_UNREACHABLE'
+  | 'TALLY_CONNECTION_LOST'
   | 'TALLY_TIMEOUT'
   | 'TALLY_LINEERROR'
   | 'TALLY_NO_CHANGE';

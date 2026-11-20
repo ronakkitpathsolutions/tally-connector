@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { readLog } from './logReader';
 import { setLogSecrets } from './logger';
+import { failureEvent } from './routes';
+import { ConnectorErrorCode } from './types';
 
 let dir: string;
 const now = new Date(2026, 10, 6, 15, 30); // 2026-11-06 local
@@ -39,6 +41,31 @@ describe('readLog', () => {
       ['warning', 'creating missing ledger'],
       ['warning', 'rejected before Tally'],
     ]);
+  });
+
+  it('keeps every failure line routes.ts can write, as an error', () => {
+    // routes.ts names the event after the error code; a name missing from TALLY_EVENTS would make
+    // that failure vanish from /logs.
+    const codes: ConnectorErrorCode[] = [
+      'TALLY_UNREACHABLE',
+      'TALLY_CONNECTION_LOST',
+      'TALLY_TIMEOUT',
+      'TALLY_LINEERROR',
+      'TALLY_NO_CHANGE',
+    ];
+    write(
+      '2026-11-04',
+      codes.map((code) => `2026-11-04T06:27:38.100Z ERROR ${failureEvent(code)} {"billNo":"T/1","errorCode":"${code}"}`),
+    );
+    const result = readLog({ date: '2026-11-04' }, { dir, now });
+    expect(result.ok && result.entries.map((e) => [e.outcome, e.errorCode])).toEqual(
+      codes.map((code) => ['error', code]),
+    );
+  });
+
+  it('says a closed Tally was unreachable, not that it rejected the voucher', () => {
+    expect(failureEvent('TALLY_UNREACHABLE')).not.toMatch(/reject/i);
+    expect(failureEvent('TALLY_LINEERROR')).toBe('Tally rejected the voucher');
   });
 
   it("returns each entry structured, with Tally's reason verbatim", () => {
